@@ -1,0 +1,6 @@
+{"id": "chat-short", "messages": [{"role": "user", "content": "What is the capital of France?"}]}
+{"id": "code", "messages": [{"role": "user", "content": "Write a Python function that checks whether a string is a palindrome."}]}
+{"id": "math", "messages": [{"role": "user", "content": "A train travels 180 km in 2.5 hours. What is its average speed in km/h? Show your steps."}]}
+{"id": "non-english", "messages": [{"role": "user", "content": "Explique la photosynthèse en trois phrases."}]}
+{"id": "emoji-utf8", "messages": [{"role": "user", "content": "Reply with five food emoji and their names, like 🍕 pizza."}]}
+{"id": "multi-turn", "messages": [{"role": "user", "content": "My name is Sam."}, {"role": "assistant", "content": "Nice to meet you, Sam!"}, {"role": "user", "content": "What is my name?"}]}

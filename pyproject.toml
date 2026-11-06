@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "engine"
+version = "0.1.0"
+description = "An LLM inference engine built from scratch: paged KV cache, continuous batching, custom kernels."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.4",
+    "safetensors>=0.4",
+    "transformers>=4.45",   # tokenizer + chat template only; the model code is ours
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "hypothesis>=6",
+    "ruff>=0.6",
+    "pre-commit>=3.7",
+    "huggingface_hub>=0.24",
+]
+kernels = ["triton>=3.0"]   # Phase 2+. On native Windows use the community `triton-windows` package, or WSL2.
+serve = ["fastapi>=0.110", "uvicorn>=0.29", "prometheus-client>=0.20"]   # Phase 2+
+
+[project.scripts]
+engine = "engine.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["engine*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "gpu: needs a CUDA GPU",
+    "slow: needs downloaded model weights (set ENGINE_MODEL_DIR)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]

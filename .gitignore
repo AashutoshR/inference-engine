@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+build/
+dist/
+
+# Model weights are large and licensed: never commit them.
+models/
+*.safetensors
+
+# Profiler traces
+*.nsys-rep
+*.pt.trace.json
