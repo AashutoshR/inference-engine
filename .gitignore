@@ -16,3 +16,6 @@ models/
 # Profiler traces
 *.nsys-rep
 *.pt.trace.json
+
+# Cached Hugging Face golden references (machine-specific)
+.cache/

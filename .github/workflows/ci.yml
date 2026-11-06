@@ -15,7 +15,7 @@ jobs:
       - name: Install CPU-only PyTorch
         run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Install package
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,serve]"
       - name: Lint
         run: ruff check . && ruff format --check .
       # Hosted runners have no GPU and no model weights: gpu and slow tests are skipped here.

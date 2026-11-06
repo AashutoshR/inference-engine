@@ -15,6 +15,8 @@ class SamplingParams:
     max_tokens: int = 256
     seed: int | None = None
     stop: tuple[str, ...] = field(default_factory=tuple)
+    logprobs: bool = False  # report each sampled token's log-probability
+    top_logprobs: int = 0  # and this many most likely alternatives (0 to 20)
 
     def __post_init__(self) -> None:
         if self.temperature < 0:
@@ -29,6 +31,10 @@ class SamplingParams:
             raise ValueError("repetition_penalty must be > 0")
         if self.max_tokens < 1:
             raise ValueError("max_tokens must be >= 1")
+        if not 0 <= self.top_logprobs <= 20:
+            raise ValueError("top_logprobs must be in [0, 20]")
+        if self.top_logprobs and not self.logprobs:
+            raise ValueError("top_logprobs needs logprobs=True")
 
     @property
     def greedy(self) -> bool:

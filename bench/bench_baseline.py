@@ -36,8 +36,8 @@ def timed(fn) -> float:
 def bench_prefill(model, prompt_len: int, repeats: int) -> float:
     ids = torch.randint(0, model.cfg.vocab_size, (1, prompt_len), device="cuda")
     positions = torch.arange(prompt_len, device="cuda").unsqueeze(0)
-    model(ids, positions)  # warm-up
-    times = [timed(lambda: model(ids, positions)) for _ in range(repeats)]
+    model(ids, positions, last_only=True)  # warm-up
+    times = [timed(lambda: model(ids, positions, last_only=True)) for _ in range(repeats)]
     return prompt_len / statistics.median(times)
 
 

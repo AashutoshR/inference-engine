@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>engine · live</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #121722; --panel2: #171d2b; --line: #232b3d;
+    --text: #e6e9ef; --muted: #8b93a7; --accent: #7aa2ff; --prefill: #f6b65a;
+    --decode: #4fd1c5; --cached: #2a5f66; --free: #1a2030; --shared: #f2f4f8; --bad: #ff6b81;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+           padding: 16px 24px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+  header .model { color: var(--muted); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .chip { padding: 2px 9px; border-radius: 999px; background: var(--panel2);
+          border: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .chip.on { color: var(--text); border-color: #34446a; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); display: inline-block; }
+  .dot.live { background: #3ddc84; box-shadow: 0 0 8px #3ddc84; }
+  .wrap { padding: 20px 24px 40px; max-width: 1400px; margin: 0 auto; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .stat .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+  .stat .v { font-size: 26px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat .s { color: var(--muted); font-size: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .panel h2 { font-size: 14px; margin: 0 0 4px; }
+  .panel p.cap { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+  .full { grid-column: 1 / -1; }
+  canvas { width: 100%; display: block; border-radius: 8px; background: #0f131c; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .pill { padding: 1px 8px; border-radius: 999px; font-size: 11.5px; }
+  .pill.prefill { background: rgba(246,182,90,.15); color: var(--prefill); }
+  .pill.decode { background: rgba(79,209,197,.15); color: var(--decode); }
+  .pill.waiting { background: rgba(139,147,167,.15); color: var(--muted); }
+  .bar { height: 6px; background: var(--free); border-radius: 4px; overflow: hidden; min-width: 90px; }
+  .bar > span { display: block; height: 100%; }
+  .empty { color: var(--muted); padding: 14px 8px; }
+  .play { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 980px) { .play { grid-template-columns: 1fr; } }
+  textarea, input { width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+                    border-radius: 8px; padding: 10px; font: inherit; }
+  textarea { min-height: 96px; resize: vertical; }
+  .row { display: flex; gap: 10px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .row label { color: var(--muted); font-size: 12px; }
+  .row input { width: 90px; }
+  .row label.check { display: flex; align-items: center; gap: 6px; }
+  .row label.check input { width: auto; }
+  .out span.t { border-radius: 3px; cursor: default; }
+  .out span.t:hover { outline: 1px solid var(--text); }
+  button { background: var(--accent); color: #0b0e14; border: 0; border-radius: 8px; padding: 9px 14px;
+           font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+  .out { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+         min-height: 160px; max-height: 320px; overflow: auto; white-space: pre-wrap; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  #tip { position: fixed; pointer-events: none; background: #000c; border: 1px solid var(--line);
+         padding: 6px 9px; border-radius: 6px; font-size: 12px; display: none; z-index: 10; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="live"></span>
+  <h1>engine</h1>
+  <span class="model" id="model">connecting…</span>
+  <div class="chips" id="chips"></div>
+</header>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><div class="k">Generation</div><div class="v" id="tps">0</div><div class="s">tokens per second</div></div>
+    <div class="stat"><div class="k">Requests</div><div class="v" id="reqs">0</div><div class="s" id="reqs-s">running · 0 waiting</div></div>
+    <div class="stat"><div class="k">KV memory</div><div class="v" id="kv">0%</div><div class="s" id="kv-s">of 0 tokens</div></div>
+    <div class="stat"><div class="k">Prefix cache</div><div class="v" id="hit">0%</div><div class="s" id="hit-s">of prompt tokens reused</div></div>
+    <div class="stat"><div class="k">Steps</div><div class="v" id="sps">0</div><div class="s" id="sps-s">per second</div></div>
+    <div class="stat"><div class="k">Preemptions</div><div class="v" id="pre">0</div><div class="s">sequences paused for memory</div></div>
+  </div>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>KV cache, block by block</h2>
+      <p class="cap">Every square is one block of GPU memory holding the keys and values of a few tokens.
+        Colors are requests. Watch blocks get claimed as prompts arrive, shared when prompts start the
+        same way, and kept as reusable cache after a request ends.</p>
+      <canvas id="blocks" height="360"></canvas>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>owned by a request (one color each)</span>
+        <span><i style="background:var(--shared)"></i>shared prefix</span>
+        <span><i style="background:var(--cached)"></i>cached, reusable</span>
+        <span><i style="background:var(--free)"></i>free</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Scheduler, step by step</h2>
+      <p class="cap">One bar per engine step. Amber is prompt tokens being read (prefill, chunked to a
+        budget), teal is one new token per running request (decode). The line is how long the step took.</p>
+      <canvas id="steps" height="360"></canvas>
+      <div class="legend">
+        <span><i style="background:var(--prefill)"></i>prefill tokens</span>
+        <span><i style="background:var(--decode)"></i>decode tokens</span>
+        <span><i style="background:var(--text)"></i>step time (ms)</span>
+        <span id="last-step"></span>
+      </div>
+    </section>
+
+    <section class="panel full">
+      <h2>Requests in flight</h2>
+      <p class="cap">Running requests share every step. A request reads its prompt first, then generates one
+        token per step until it stops.</p>
+      <table>
+        <thead><tr><th>request</th><th>phase</th><th>progress</th><th>prompt</th><th>generated</th>
+          <th>from cache</th><th>blocks</th><th>preempted</th></tr></thead>
+        <tbody id="seqs"><tr><td colspan="8" class="empty">Idle. Send a prompt below.</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="panel full">
+      <h2>Playground</h2>
+      <p class="cap">Talk to the model through the same OpenAI-compatible API any client uses, and watch the
+        panels above react. <b>Flood</b> sends 16 requests at once that share a long system prompt, so you can
+        see batching and prefix caching at work.</p>
+      <div class="play">
+        <div>
+          <textarea id="prompt">Explain how a KV cache speeds up text generation, in three short paragraphs.</textarea>
+          <div class="row">
+            <label>max tokens <input id="maxtok" type="number" value="200" min="1"></label>
+            <label>temperature <input id="temp" type="number" value="0.7" step="0.1" min="0"></label>
+            <label class="check"><input id="conf" type="checkbox" checked> show confidence</label>
+            <button id="send">Send</button>
+            <button class="ghost" id="flood">Flood ×16</button>
+          </div>
+        </div>
+        <div>
+          <div class="out" id="out"></div>
+          <div class="meta" id="outmeta"></div>
+          <div class="meta">With <b>show confidence</b> on, each token is tinted by how sure the model was
+            (green sure, red unsure). Hover a token to see what else it considered.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+<div id="tip"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let modelName = null, state = null, prev = null, rate = { tps: 0, sps: 0 };
+
+const hue = (id) => (id * 137.508) % 360;
+const ownerColor = (id) => `hsl(${hue(id)} 70% 60%)`;
+
+function chip(label, on) { return `<span class="chip ${on ? "on" : ""}">${label}</span>`; }
+
+function fmt(n) { return n >= 10000 ? (n / 1000).toFixed(1) + "k" : String(Math.round(n)); }
+
+async function poll() {
+  try {
+    if (!modelName) {
+      const m = await (await fetch("/v1/models")).json();
+      modelName = m.data[0].id;
+      $("model").textContent = modelName;
+    }
+    const s = await (await fetch("/debug/state")).json();
+    if (s && s.config) { update(s); $("live").classList.add("live"); }
+  } catch (e) { $("live").classList.remove("live"); }
+  setTimeout(poll, 300);
+}
+
+function update(s) {
+  if (prev && s.time > prev.time) {
+    const dt = s.time - prev.time;
+    const tps = (s.totals.generated_tokens - prev.totals.generated_tokens) / dt;
+    const sps = (s.totals.steps - prev.totals.steps) / dt;
+    rate.tps = rate.tps * 0.6 + tps * 0.4;
+    rate.sps = rate.sps * 0.6 + sps * 0.4;
+  }
+  prev = s; state = s;
+  const c = s.config, t = s.totals;
+  $("chips").innerHTML = [
+    chip(c.device, true), chip(c.dtype, true), chip("quant: " + c.quantization, c.quantization !== "none"),
+    chip("Triton attention", c.triton), chip("CUDA graphs", c.cuda_graphs),
+    chip("prefix cache", c.prefix_caching), chip("chunked prefill", c.chunked_prefill),
+  ].join("");
+  $("tps").textContent = fmt(rate.tps);
+  $("reqs").textContent = s.running.length;
+  $("reqs-s").textContent = `running · ${s.num_waiting} waiting · ${fmt(t.finished_requests)} done`;
+  const used = c.num_blocks - t.free_blocks;
+  $("kv").textContent = Math.round(100 * used / c.num_blocks) + "%";
+  $("kv-s").textContent = `${fmt(used)} of ${fmt(c.num_blocks)} blocks · ${fmt(c.capacity_tokens)} tokens`;
+  $("hit").textContent = t.prompt_tokens ? Math.round(100 * t.cached_prompt_tokens / t.prompt_tokens) + "%" : "0%";
+  $("hit-s").textContent = `${fmt(t.cached_prompt_tokens)} of ${fmt(t.prompt_tokens)} prompt tokens reused`;
+  $("sps").textContent = fmt(rate.sps);
+  $("sps-s").textContent = `per second · ${fmt(t.steps)} total`;
+  $("pre").textContent = fmt(t.preemptions);
+  drawBlocks(s); drawSteps(s.steps); drawSeqs(s);
+}
+
+let cellGeom = null;
+function drawBlocks(s) {
+  const cv = $("blocks"), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = 360;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr);
+  const n = s.blocks.length;
+  let cell = Math.max(3, Math.floor(Math.sqrt((w * h) / n)));
+  let cols = Math.floor(w / cell);
+  while (Math.ceil(n / cols) * cell > h && cell > 3) { cell--; cols = Math.floor(w / cell); }
+  const gap = cell > 6 ? 1 : 0;
+  cellGeom = { cell, cols, n };
+  for (let i = 0; i < n; i++) {
+    const code = s.blocks[i], x = (i % cols) * cell, y = Math.floor(i / cols) * cell;
+    if (y > h) break;
+    ctx.fillStyle = code === "o" ? ownerColor(s.owners[i]) : code === "s" ? "#f2f4f8"
+                  : code === "c" ? "#2a5f66" : "#1a2030";
+    ctx.fillRect(x, y, cell - gap, cell - gap);
+  }
+}
+
+function drawSteps(steps) {
+  const cv = $("steps"), dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = 360, pad = 28;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr);
+  ctx.fillStyle = "#8b93a7"; ctx.font = "11px system-ui";
+  if (!steps.length) { ctx.fillText("No steps yet", 12, 20); return; }
+  const maxTok = Math.max(8, ...steps.map((s) => s.prefill_tokens + s.decode_tokens));
+  const maxMs = Math.max(1, ...steps.map((s) => s.ms));
+  const bw = (w - pad * 2) / 120;
+  steps.forEach((s, i) => {
+    const x = pad + (120 - steps.length + i) * bw;
+    const hp = (h - pad * 2) * s.prefill_tokens / maxTok, hd = (h - pad * 2) * s.decode_tokens / maxTok;
+    ctx.fillStyle = "#4fd1c5"; ctx.fillRect(x, h - pad - hd, Math.max(1, bw - 1), hd);
+    ctx.fillStyle = "#f6b65a"; ctx.fillRect(x, h - pad - hd - hp, Math.max(1, bw - 1), hp);
+  });
+  ctx.strokeStyle = "#e6e9ef"; ctx.lineWidth = 1.5; ctx.beginPath();
+  steps.forEach((s, i) => {
+    const x = pad + (120 - steps.length + i + 0.5) * bw, y = h - pad - (h - pad * 2) * s.ms / maxMs;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.stroke();
+  ctx.fillStyle = "#8b93a7";
+  ctx.fillText(`${maxTok} tokens`, 4, pad - 8);
+  ctx.textAlign = "right"; ctx.fillText(`${maxMs.toFixed(1)} ms`, w - 4, pad - 8);
+  const last = steps[steps.length - 1];
+  $("last-step").textContent = `last step: ${last.seqs} requests, ${last.prefill_tokens + last.decode_tokens} tokens, ` +
+    `${last.ms} ms${last.graph ? ", CUDA graph" : ""}`;
+}
+
+function drawSeqs(s) {
+  const rows = s.running.map((q) => row(q, q.phase)).concat(s.waiting.map((q) => row(q, "waiting")));
+  $("seqs").innerHTML = rows.length ? rows.join("") :
+    `<tr><td colspan="8" class="empty">Idle. Send a prompt below.</td></tr>`;
+}
+
+function row(q, phase) {
+  const pct = phase === "prefill" ? q.computed / q.prompt : q.output / q.max_tokens;
+  const color = phase === "prefill" ? "var(--prefill)" : phase === "decode" ? ownerColor(q.id) : "var(--muted)";
+  return `<tr><td><span style="color:${ownerColor(q.id)}">●</span> ${q.request}</td>
+    <td><span class="pill ${phase}">${phase}</span></td>
+    <td><div class="bar"><span style="width:${Math.round(100 * Math.min(1, pct))}%;background:${color}"></span></div></td>
+    <td>${q.prompt}</td><td>${q.output} / ${q.max_tokens}</td><td>${q.cached}</td><td>${q.blocks}</td><td>${q.preemptions}</td></tr>`;
+}
+
+$("blocks").addEventListener("mousemove", (e) => {
+  const tip = $("tip");
+  if (!state || !cellGeom) return;
+  const r = e.target.getBoundingClientRect();
+  const i = Math.floor((e.clientY - r.top) / cellGeom.cell) * cellGeom.cols + Math.floor((e.clientX - r.left) / cellGeom.cell);
+  if (i < 0 || i >= cellGeom.n || (e.clientX - r.left) >= cellGeom.cols * cellGeom.cell) { tip.style.display = "none"; return; }
+  const code = state.blocks[i];
+  const what = { o: "owned by request", s: "shared prefix, first owner", c: "cached prefix, reusable", ".": "free" }[code];
+  const owner = state.owners[i] >= 0 ? ` #${state.owners[i]}` : "";
+  tip.textContent = `block ${i}: ${what}${owner}`;
+  tip.style.left = e.clientX + 12 + "px"; tip.style.top = e.clientY + 12 + "px"; tip.style.display = "block";
+});
+$("blocks").addEventListener("mouseleave", () => ($("tip").style.display = "none"));
+
+$("out").addEventListener("mousemove", (e) => {
+  const tip = $("tip"), span = e.target.closest("span.t");
+  if (!span) { tip.style.display = "none"; return; }
+  const alts = JSON.parse(span.dataset.alts);
+  tip.innerHTML = `<b>${(100 * span.dataset.p).toFixed(1)}%</b> sure of this token<br>` + alts.map(([tok, p]) =>
+    `${(100 * p).toFixed(1).padStart(5)}%&nbsp;&nbsp;<code>${esc(JSON.stringify(tok))}</code>`).join("<br>");
+  tip.style.left = e.clientX + 12 + "px"; tip.style.top = e.clientY + 12 + "px"; tip.style.display = "block";
+});
+$("out").addEventListener("mouseleave", () => ($("tip").style.display = "none"));
+
+async function chat(messages, maxTokens, temperature, onText, withLogprobs = false) {
+  const t0 = performance.now(); let first = null, tokens = 0;
+  const body = { model: modelName, messages, max_tokens: maxTokens, temperature, stream: true,
+                 stream_options: { include_usage: true } };
+  if (withLogprobs) { body.logprobs = true; body.top_logprobs = 5; }
+  const res = await fetch("/v1/chat/completions", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error ? e.error.message : res.status); }
+  const reader = res.body.getReader(), dec = new TextDecoder(); let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let k;
+    while ((k = buf.indexOf("\n\n")) >= 0) {
+      const line = buf.slice(0, k); buf = buf.slice(k + 2);
+      if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+      const ev = JSON.parse(line.slice(6));
+      if (ev.usage) tokens = ev.usage.completion_tokens;
+      const choice = ev.choices && ev.choices[0];
+      const piece = choice && choice.delta.content;
+      const lp = choice && choice.logprobs && choice.logprobs.content && choice.logprobs.content[0];
+      if (piece || lp) { if (piece && first === null) first = performance.now(); onText(piece || "", lp); }
+    }
+  }
+  return { ttft: first === null ? null : first - t0, total: performance.now() - t0, tokens };
+}
+
+const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+$("send").onclick = async () => {
+  const out = $("out"); out.textContent = ""; $("outmeta").textContent = "";
+  $("send").disabled = true;
+  const conf = $("conf").checked;
+  let pending = null;  // a token that was half a character: its probability joins the next piece
+  const onText = (t, lp) => {
+    if (!conf || !lp) { out.insertAdjacentText("beforeend", t); out.scrollTop = out.scrollHeight; return; }
+    if (!t) { pending = pending && pending.logprob < lp.logprob ? pending : lp; return; }
+    const entry = pending && pending.logprob < lp.logprob ? pending : lp; pending = null;
+    const p = Math.exp(entry.logprob);
+    const span = document.createElement("span");
+    span.className = "t"; span.textContent = t;
+    span.style.background = `hsla(${Math.round(120 * p)}, 70%, 45%, ${0.18 + 0.32 * (1 - p)})`;
+    span.dataset.alts = JSON.stringify((entry.top_logprobs || []).map((a) => [a.token, Math.exp(a.logprob)]));
+    span.dataset.p = p;
+    out.appendChild(span); out.scrollTop = out.scrollHeight;
+  };
+  try {
+    const r = await chat([{ role: "user", content: $("prompt").value }], +$("maxtok").value, +$("temp").value,
+                         onText, conf);
+    $("outmeta").textContent = `${r.tokens} tokens · first token after ${Math.round(r.ttft)} ms · ` +
+      `${(r.tokens / (r.total / 1000)).toFixed(1)} tokens/s for this request`;
+  } catch (e) { $("outmeta").textContent = "error: " + e.message; }
+  $("send").disabled = false;
+};
+
+const SYSTEM = "You are a concise assistant for a small bakery called Rise & Shine. You know the menu " +
+  "(sourdough loaves, croissants, cinnamon buns, seasonal fruit tarts), the opening hours (7am to 3pm, " +
+  "closed Mondays), and that every loaf is fermented for 36 hours. Answer warmly in two or three sentences.";
+const QUESTIONS = ["What time do you open on Saturday?", "Do you have anything vegan?", "Why does your bread take 36 hours?",
+  "Can I order a cake for a birthday?", "What is in the cinnamon buns?", "Are you open on Monday?",
+  "Which tart is in season now?", "How should I store sourdough at home?", "Do you sell flour or starter?",
+  "Is there seating inside?", "What is your most popular item?", "Can I freeze croissants?",
+  "Do you make gluten-free bread?", "How early should I come for croissants?", "Do you take card payments?",
+  "What makes sourdough different from regular bread?"];
+
+$("flood").onclick = async () => {
+  $("flood").disabled = true; $("outmeta").textContent = "16 requests in flight…";
+  const t0 = performance.now();
+  const results = await Promise.allSettled(QUESTIONS.map((q) =>
+    chat([{ role: "system", content: SYSTEM }, { role: "user", content: q }], 120, 0.7, () => {})));
+  const ok = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
+  const tokens = ok.reduce((a, r) => a + r.tokens, 0), secs = (performance.now() - t0) / 1000;
+  $("outmeta").textContent = `${ok.length}/16 finished · ${tokens} tokens in ${secs.toFixed(1)} s ` +
+    `= ${(tokens / secs).toFixed(0)} tokens/s together`;
+  $("flood").disabled = false;
+};
+
+poll();
+</script>
+</body>
+</html>

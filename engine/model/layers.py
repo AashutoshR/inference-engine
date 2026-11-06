@@ -18,6 +18,7 @@ from torch import nn
 
 from engine.config import ModelConfig
 from engine.runtime.kv_cache import ContiguousKVCache
+from engine.runtime.paged_cache import PagedBatch
 
 
 class RMSNorm(nn.Module):
@@ -126,7 +127,7 @@ class Attention(nn.Module):
         x: torch.Tensor,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        cache: ContiguousKVCache | None = None,
+        cache: ContiguousKVCache | PagedBatch | None = None,
         start_pos: int = 0,
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
@@ -146,6 +147,8 @@ class Attention(nn.Module):
         v = self.v_proj(x).view(b, t, -1, hd).transpose(1, 2)
         q, k = apply_rotary(q, k, cos, sin)
 
+        if isinstance(cache, PagedBatch):
+            return self.o_proj(self._paged(q[0], k[0], v[0], cache))[None]
         if cache is not None:
             k, v = cache.update(self.layer_idx, k, v, start_pos)
         else:
@@ -162,6 +165,40 @@ class Attention(nn.Module):
             mask = build_attention_mask(t, start_pos, attention_mask, x.device)
             out = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
         return self.o_proj(out.transpose(1, 2).reshape(b, t, -1))
+
+    def _paged(
+        self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, batch: PagedBatch
+    ) -> torch.Tensor:
+        """Reference paged attention over flattened tokens.
+
+        q: [nh, N, hd], k, v: [nkv, N, hd] for the step's N new tokens (all sequences
+        concatenated). Writes k, v into the paged cache, gathers each sequence's context
+        through its block table, and returns [N, nh * hd].
+        """
+        batch.cache.write(self.layer_idx, k.transpose(0, 1), v.transpose(0, 1), batch.slot_mapping)
+        if batch.use_kernel:  # decode step: Triton kernel reads K/V through block tables
+            from engine.kernels.paged_attention import paged_decode_attention
+
+            out = paged_decode_attention(
+                q.transpose(0, 1),
+                batch.cache.k[self.layer_idx],
+                batch.cache.v[self.layer_idx],
+                batch.block_tables,
+                batch.context_lens,
+                batch.cache.block_size,
+            )
+            return out.flatten(1)
+        k_ctx, v_ctx = batch.cache.gather(self.layer_idx, batch.kv_slots)  # [B, ctx, nkv, hd]
+        k_ctx, v_ctx = k_ctx.transpose(1, 2).to(q.dtype), v_ctx.transpose(1, 2).to(q.dtype)
+        groups = self.cfg.num_kv_groups
+        if groups > 1:
+            k_ctx = k_ctx.repeat_interleave(groups, dim=1)
+            v_ctx = v_ctx.repeat_interleave(groups, dim=1)
+
+        q_pad = q.transpose(0, 1)[batch.q_index].transpose(1, 2)  # [B, nh, max_q, hd]
+        out = F.scaled_dot_product_attention(q_pad, k_ctx, v_ctx, attn_mask=batch.attn_mask)
+        out = out.transpose(1, 2).flatten(2)  # [B, max_q, nh * hd]
+        return out[batch.q_valid]  # back to flattened order: sequence by sequence
 
 
 class MLP(nn.Module):
@@ -190,7 +227,7 @@ class DecoderLayer(nn.Module):
         x: torch.Tensor,
         cos: torch.Tensor,
         sin: torch.Tensor,
-        cache: ContiguousKVCache | None = None,
+        cache: ContiguousKVCache | PagedBatch | None = None,
         start_pos: int = 0,
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:

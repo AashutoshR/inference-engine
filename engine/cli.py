@@ -48,7 +48,8 @@ def cmd_generate(args: argparse.Namespace) -> int:
     from engine.runtime.generate import generate
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = load_model(args.model, device=args.device)
+    quant = None if args.quantization == "none" else args.quantization
+    model = load_model(args.model, device=args.device, quantization=quant)
     prompt_ids = chat_prompt_ids(tokenizer, [{"role": "user", "content": args.prompt}])
     params = SamplingParams(
         temperature=args.temperature, top_p=args.top_p, max_tokens=args.max_tokens, seed=args.seed
@@ -67,11 +68,56 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    """OpenAI-compatible server: paged KV cache, continuous batching, SSE streaming."""
+    import logging
+    from pathlib import Path
+
+    import uvicorn
+    from transformers import AutoTokenizer
+
+    from engine.model.loader import load_model
+    from engine.runtime.engine import LLMEngine
+    from engine.server.api import create_app
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    start = time.perf_counter()
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    import torch
+
+    quant = None if args.quantization == "none" else args.quantization
+    model = load_model(
+        args.model,
+        device=args.device,
+        dtype=getattr(torch, args.dtype),
+        quantization=quant,
+        group_size=args.group_size,
+    )
+    engine = LLMEngine(
+        model,
+        tokenizer,
+        load_stop_token_ids(args.model),
+        num_blocks=args.num_blocks,
+        block_size=args.block_size,
+        max_num_seqs=args.max_num_seqs,
+        max_num_batched_tokens=args.max_num_batched_tokens,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        enable_prefix_caching=not args.no_prefix_caching,
+        enable_chunked_prefill=not args.no_chunked_prefill,
+        enable_cuda_graphs=False if args.no_cuda_graphs else None,
+    )
+    cap = engine.scheduler.capacity_tokens
     print(
-        "`engine serve` is Phase 2 (paged KV cache, continuous batching, OpenAI API).",
+        f"KV cache: {engine.block_manager.allocator.num_blocks} blocks x {args.block_size} = "
+        f"{cap:,} tokens; loaded in {time.perf_counter() - start:.1f}s",
         file=sys.stderr,
     )
-    return 2
+    name = args.served_model_name or Path(args.model).name
+    app = create_app(
+        engine, tokenizer, name, max_waiting=args.max_waiting, request_timeout=args.timeout
+    )
+    print(f"dashboard: http://{args.host}:{args.port}/dashboard", file=sys.stderr)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -91,10 +137,28 @@ def build_parser() -> argparse.ArgumentParser:
     gen.add_argument("--max-tokens", type=int, default=256)
     gen.add_argument("--seed", type=int, default=None)
     gen.add_argument("--device", default="cuda")
+    gen.add_argument("--quantization", choices=["none", "int4", "fp8"], default="none")
     gen.set_defaults(func=cmd_generate)
 
-    serve = sub.add_parser("serve", help="OpenAI-compatible server (Phase 2)")
+    serve = sub.add_parser("serve", help="OpenAI-compatible server")
     serve.add_argument("--model", required=True)
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--served-model-name", default=None, help="default: model folder name")
+    serve.add_argument("--device", default="cuda")
+    serve.add_argument("--dtype", default="bfloat16", choices=["bfloat16", "float16", "float32"])
+    serve.add_argument("--max-num-seqs", type=int, default=64, help="max running sequences")
+    serve.add_argument("--max-num-batched-tokens", type=int, default=4096)
+    serve.add_argument("--max-waiting", type=int, default=256, help="queue limit; then HTTP 429")
+    serve.add_argument("--timeout", type=float, default=600.0, help="per-request seconds")
+    serve.add_argument("--block-size", type=int, default=16)
+    serve.add_argument("--num-blocks", type=int, default=None, help="default: fill free GPU memory")
+    serve.add_argument("--gpu-memory-utilization", type=float, default=0.9)
+    serve.add_argument("--no-prefix-caching", action="store_true")
+    serve.add_argument("--no-chunked-prefill", action="store_true")
+    serve.add_argument("--quantization", choices=["none", "int4", "fp8"], default="none")
+    serve.add_argument("--group-size", type=int, default=128, help="int4 group size")
+    serve.add_argument("--no-cuda-graphs", action="store_true")
     serve.set_defaults(func=cmd_serve)
     return parser
 

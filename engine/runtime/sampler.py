@@ -25,7 +25,14 @@ def sample(
     if params.greedy:
         return logits.argmax(dim=-1)
 
-    logits = logits / params.temperature
+    probs = distribution(logits, params)
+    return torch.multinomial(probs, 1, generator=generator).squeeze(-1)
+
+
+def distribution(logits: torch.Tensor, params: SamplingParams) -> torch.Tensor:
+    """The distribution ``sample`` draws from (non-greedy): temperature, top-k, top-p,
+    min-p, then softmax. Speculative decoding needs it explicitly for acceptance tests."""
+    logits = logits.float() / params.temperature
     if params.top_k > 0 and params.top_k < logits.shape[-1]:
         kth = logits.topk(params.top_k, dim=-1).values[..., -1:]
         logits = logits.masked_fill(logits < kth, float("-inf"))
@@ -35,9 +42,7 @@ def sample(
         probs = logits.softmax(dim=-1)
         floor = params.min_p * probs.max(dim=-1, keepdim=True).values
         logits = logits.masked_fill(probs < floor, float("-inf"))
-
-    probs = logits.softmax(dim=-1)
-    return torch.multinomial(probs, 1, generator=generator).squeeze(-1)
+    return logits.softmax(dim=-1)
 
 
 def apply_repetition_penalty(

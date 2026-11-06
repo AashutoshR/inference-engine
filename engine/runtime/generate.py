@@ -8,10 +8,10 @@ from typing import Any
 
 import torch
 
-from engine.runtime.detokenizer import IncrementalDetokenizer
 from engine.runtime.kv_cache import ContiguousKVCache
 from engine.runtime.params import SamplingParams
 from engine.runtime.sampler import sample
+from engine.runtime.stop import OutputProcessor
 
 
 @dataclass
@@ -21,35 +21,6 @@ class StepOutput:
     text: str  # detokenized delta, possibly ""
     finished: bool
     finish_reason: str | None = None  # "stop" | "length"
-
-
-class _StopStringFilter:
-    """Holds back text that could be the start of a stop string, so none of it leaks out."""
-
-    def __init__(self, stops: tuple[str, ...]) -> None:
-        self.stops = stops
-        self.holdback = max((len(s) for s in stops), default=1) - 1
-        self.text = ""
-        self.emitted = 0
-
-    def push(self, delta: str) -> tuple[str, bool]:
-        """Add a delta; return (text safe to emit now, whether a stop string was hit)."""
-        self.text += delta
-        # Everything before `emitted` was already checked; a new match starts in the held-back
-        # tail or the new delta.
-        hits = [i for s in self.stops if (i := self.text.find(s, self.emitted)) != -1]
-        if hits:
-            return self._emit_until(min(hits)), True
-        return self._emit_until(len(self.text) - self.holdback), False
-
-    def flush(self) -> str:
-        return self._emit_until(len(self.text))
-
-    def _emit_until(self, end: int) -> str:
-        if end <= self.emitted:
-            return ""
-        out, self.emitted = self.text[self.emitted : end], end
-        return out
 
 
 def generate(
@@ -98,21 +69,18 @@ def generate(
         generator = torch.Generator(device=device).manual_seed(params.seed)
 
     cache = ContiguousKVCache(model.cfg, batch, total_len, device=device, dtype=dtype)
-    detoks = [IncrementalDetokenizer(tokenizer, p) for p in prompts]
-    filters = [_StopStringFilter(params.stop) for _ in prompts]
-    stop_set = set(stop_token_ids)
+    processors = [OutputProcessor(tokenizer, p, params, stop_token_ids) for p in prompts]
     finished = [False] * batch
     history = input_ids  # [B, L]: everything each row has seen, for the repetition penalty
 
-    logits = model(input_ids, positions, cache, 0, attention_mask)[:, -1]
+    logits = model(input_ids, positions, cache, 0, attention_mask, last_only=True)[:, -1]
     for step in range(params.max_tokens):
         tokens = sample(logits, params, generator, prev_tokens=history)
         for row, tok in enumerate(tokens.tolist()):
             if finished[row]:
                 continue
-            out = _advance(row, tok, step, params, stop_set, detoks[row], filters[row])
-            finished[row] = out.finished
-            yield out
+            text, finished[row], reason = processors[row].process(tok)
+            yield StepOutput(row, tok, text, finished[row], reason)
         if all(finished) or step == params.max_tokens - 1:
             return
 
@@ -120,22 +88,3 @@ def generate(
         history = torch.cat([history, next_ids], dim=1)
         positions = positions[:, -1:] + 1
         logits = model(next_ids, positions, cache, prompt_len + step, attention_mask)[:, -1]
-
-
-def _advance(
-    row: int,
-    tok: int,
-    step: int,
-    params: SamplingParams,
-    stop_set: set[int],
-    detok: IncrementalDetokenizer,
-    stop_filter: _StopStringFilter,
-) -> StepOutput:
-    if tok in stop_set:
-        return StepOutput(row, tok, stop_filter.flush(), True, "stop")
-    text, hit_stop = stop_filter.push(detok.add(tok))
-    if hit_stop:
-        return StepOutput(row, tok, text, True, "stop")
-    if step == params.max_tokens - 1:
-        return StepOutput(row, tok, text + stop_filter.flush(), True, "length")
-    return StepOutput(row, tok, text, False)
