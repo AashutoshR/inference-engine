@@ -1,4 +1,4 @@
-"""Command line: ``engine info``, ``engine generate``; ``engine serve`` arrives in Phase 2."""
+"""Command line: ``engine info``, ``engine generate``, ``engine serve``."""
 
 from __future__ import annotations
 
@@ -67,23 +67,18 @@ def cmd_generate(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_serve(args: argparse.Namespace) -> int:
-    """OpenAI-compatible server: paged KV cache, continuous batching, SSE streaming."""
-    import logging
-    from pathlib import Path
-
-    import uvicorn
+def build_engine(args: argparse.Namespace, tokenizer=None):
+    """Load the model and build the LLMEngine for ``engine serve``. Module level, so a
+    spawned engine process can call it (through functools.partial) to build its own."""
+    import torch
     from transformers import AutoTokenizer
 
     from engine.model.loader import load_model
     from engine.runtime.engine import LLMEngine
-    from engine.server.api import create_app
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     start = time.perf_counter()
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
-    import torch
-
+    if tokenizer is None:
+        tokenizer = AutoTokenizer.from_pretrained(args.model)
     quant = None if args.quantization == "none" else args.quantization
     model = load_model(
         args.model,
@@ -104,6 +99,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         enable_prefix_caching=not args.no_prefix_caching,
         enable_chunked_prefill=not args.no_chunked_prefill,
         enable_cuda_graphs=False if args.no_cuda_graphs else None,
+        enable_mixed_graphs=False if args.no_cuda_graphs or args.no_mixed_graphs else None,
         coalesce_prefill=False if args.no_prefill_coalescing else None,
     )
     cap = engine.scheduler.capacity_tokens
@@ -112,6 +108,28 @@ def cmd_serve(args: argparse.Namespace) -> int:
         f"{cap:,} tokens; loaded in {time.perf_counter() - start:.1f}s",
         file=sys.stderr,
     )
+    return engine
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """OpenAI-compatible server: paged KV cache, continuous batching, SSE streaming."""
+    import functools
+    import logging
+    from pathlib import Path
+
+    import uvicorn
+    from transformers import AutoTokenizer
+
+    from engine.server.api import create_app
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    if args.in_process_engine:
+        engine = build_engine(args, tokenizer)
+    else:  # the engine gets a process (and a GIL) of its own; this one only serves HTTP
+        from engine.server.process_engine import ProcessEngine
+
+        engine = ProcessEngine(functools.partial(build_engine, args))
     name = args.served_model_name or Path(args.model).name
     app = create_app(
         engine, tokenizer, name, max_waiting=args.max_waiting, request_timeout=args.timeout
@@ -161,9 +179,19 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--group-size", type=int, default=128, help="int4 group size")
     serve.add_argument("--no-cuda-graphs", action="store_true")
     serve.add_argument(
+        "--in-process-engine",
+        action="store_true",
+        help="run the engine in a thread of the HTTP process instead of its own process",
+    )
+    serve.add_argument(
+        "--no-mixed-graphs",
+        action="store_true",
+        help="run steps that read prompt tokens eagerly instead of as piecewise CUDA graphs",
+    )
+    serve.add_argument(
         "--no-prefill-coalescing",
         action="store_true",
-        help="admit new prompts every step instead of reading them together",
+        help="admit new prompts every step (holding them is on only without mixed graphs)",
     )
     serve.set_defaults(func=cmd_serve)
     return parser

@@ -4,11 +4,11 @@
  "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
  "rule": "mismatches must be near-ties (gap < 1e-2)",
  "prompts": 200,
- "exact": 181,
- "near_ties": 14,
- "failed": 5,
- "tokens_compared": 19242,
- "seconds": 2041.2,
+ "exact": 182,
+ "near_ties": 11,
+ "failed": 7,
+ "tokens_compared": 19202,
+ "seconds": 1052.0,
  "outcomes": [
   {
    "id": "chat-short",
@@ -157,7 +157,7 @@
   {
    "id": "chat-19",
    "prompt_tokens": 44,
-   "tokens": 18,
+   "tokens": 16,
    "result": "exact"
   },
   {
@@ -223,7 +223,7 @@
   {
    "id": "chat-30",
    "prompt_tokens": 45,
-   "tokens": 85,
+   "tokens": 94,
    "result": "exact"
   },
   {
@@ -433,13 +433,13 @@
   {
    "id": "math-07",
    "prompt_tokens": 57,
-   "tokens": 116,
+   "tokens": 128,
    "result": "exact"
   },
   {
    "id": "math-08",
    "prompt_tokens": 43,
-   "tokens": 94,
+   "tokens": 88,
    "result": "exact"
   },
   {
@@ -493,7 +493,7 @@
   {
    "id": "math-17",
    "prompt_tokens": 48,
-   "tokens": 81,
+   "tokens": 83,
    "result": "exact"
   },
   {
@@ -583,7 +583,7 @@
   {
    "id": "lang-13",
    "prompt_tokens": 49,
-   "tokens": 40,
+   "tokens": 47,
    "result": "exact"
   },
   {
@@ -631,7 +631,7 @@
   {
    "id": "lang-21",
    "prompt_tokens": 49,
-   "tokens": 68,
+   "tokens": 56,
    "result": "exact"
   },
   {
@@ -643,7 +643,7 @@
   {
    "id": "lang-23",
    "prompt_tokens": 57,
-   "tokens": 50,
+   "tokens": 43,
    "result": "exact"
   },
   {
@@ -721,7 +721,7 @@
   {
    "id": "emoji-12",
    "prompt_tokens": 52,
-   "tokens": 29,
+   "tokens": 28,
    "result": "exact"
   },
   {
@@ -793,7 +793,7 @@
   {
    "id": "multi-10",
    "prompt_tokens": 67,
-   "tokens": 116,
+   "tokens": 120,
    "result": "exact"
   },
   {
@@ -835,7 +835,7 @@
   {
    "id": "system-03",
    "prompt_tokens": 54,
-   "tokens": 67,
+   "tokens": 71,
    "result": "exact"
   },
   {
@@ -914,14 +914,14 @@
    "id": "long-00",
    "prompt_tokens": 302,
    "tokens": 128,
-   "result": "near-tie",
+   "result": "failed",
    "diverged_at": 82,
-   "gap": 0.0
+   "gap": 0.125
   },
   {
    "id": "long-01",
    "prompt_tokens": 368,
-   "tokens": 46,
+   "tokens": 39,
    "result": "exact"
   },
   {
@@ -933,16 +933,16 @@
   {
    "id": "long-03",
    "prompt_tokens": 263,
-   "tokens": 89,
-   "result": "near-tie",
-   "diverged_at": 55,
-   "gap": 0.0
+   "tokens": 82,
+   "result": "exact"
   },
   {
    "id": "long-04",
    "prompt_tokens": 280,
    "tokens": 48,
-   "result": "exact"
+   "result": "failed",
+   "diverged_at": 28,
+   "gap": 0.125
   },
   {
    "id": "long-05",
@@ -965,24 +965,20 @@
   {
    "id": "long-08",
    "prompt_tokens": 402,
-   "tokens": 103,
+   "tokens": 96,
    "result": "exact"
   },
   {
    "id": "long-09",
    "prompt_tokens": 415,
    "tokens": 45,
-   "result": "near-tie",
-   "diverged_at": 20,
-   "gap": 0.0
+   "result": "exact"
   },
   {
    "id": "long-10",
    "prompt_tokens": 651,
    "tokens": 128,
-   "result": "near-tie",
-   "diverged_at": 80,
-   "gap": 0.0
+   "result": "exact"
   },
   {
    "id": "long-11",
@@ -1005,16 +1001,16 @@
   {
    "id": "long-14",
    "prompt_tokens": 595,
-   "tokens": 54,
-   "result": "exact"
+   "tokens": 53,
+   "result": "near-tie",
+   "diverged_at": 42,
+   "gap": 0.0
   },
   {
    "id": "long-15",
    "prompt_tokens": 851,
    "tokens": 128,
-   "result": "failed",
-   "diverged_at": 7,
-   "gap": 0.125
+   "result": "exact"
   },
   {
    "id": "long-16",
@@ -1033,7 +1029,7 @@
    "prompt_tokens": 705,
    "tokens": 93,
    "result": "near-tie",
-   "diverged_at": 54,
+   "diverged_at": 50,
    "gap": 0.0
   },
   {
@@ -1051,48 +1047,56 @@
   {
    "id": "long-21",
    "prompt_tokens": 1068,
-   "tokens": 101,
-   "result": "exact"
+   "tokens": 96,
+   "result": "failed",
+   "diverged_at": 74,
+   "gap": 0.125
   },
   {
    "id": "long-22",
    "prompt_tokens": 1015,
    "tokens": 128,
-   "result": "exact"
+   "result": "near-tie",
+   "diverged_at": 24,
+   "gap": 0.0
   },
   {
    "id": "long-23",
    "prompt_tokens": 834,
    "tokens": 115,
-   "result": "exact"
+   "result": "near-tie",
+   "diverged_at": 43,
+   "gap": 0.0
   },
   {
    "id": "long-24",
    "prompt_tokens": 955,
    "tokens": 45,
-   "result": "near-tie",
-   "diverged_at": 33,
-   "gap": 0.0
+   "result": "failed",
+   "diverged_at": 21,
+   "gap": 0.125
   },
   {
    "id": "long-25",
    "prompt_tokens": 1189,
    "tokens": 128,
-   "result": "exact"
+   "result": "failed",
+   "diverged_at": 23,
+   "gap": 0.125
   },
   {
    "id": "long-26",
    "prompt_tokens": 1231,
-   "tokens": 128,
-   "result": "failed",
-   "diverged_at": 117,
-   "gap": 0.125
+   "tokens": 123,
+   "result": "exact"
   },
   {
    "id": "long-27",
    "prompt_tokens": 1167,
    "tokens": 128,
-   "result": "exact"
+   "result": "failed",
+   "diverged_at": 98,
+   "gap": 0.125
   },
   {
    "id": "long-28",
@@ -1103,9 +1107,9 @@
   {
    "id": "long-29",
    "prompt_tokens": 1135,
-   "tokens": 57,
+   "tokens": 50,
    "result": "near-tie",
-   "diverged_at": 20,
+   "diverged_at": 42,
    "gap": 0.0
   },
   {
@@ -1120,21 +1124,25 @@
    "id": "long-31",
    "prompt_tokens": 1415,
    "tokens": 108,
-   "result": "exact"
+   "result": "failed",
+   "diverged_at": 39,
+   "gap": 0.25
   },
   {
    "id": "long-32",
    "prompt_tokens": 1337,
    "tokens": 128,
-   "result": "failed",
+   "result": "near-tie",
    "diverged_at": 100,
-   "gap": 0.125
+   "gap": 0.0
   },
   {
    "id": "long-33",
    "prompt_tokens": 1146,
-   "tokens": 119,
-   "result": "exact"
+   "tokens": 107,
+   "result": "near-tie",
+   "diverged_at": 47,
+   "gap": 0.0
   },
   {
    "id": "long-34",
@@ -1151,9 +1159,9 @@
   {
    "id": "long-36",
    "prompt_tokens": 1567,
-   "tokens": 106,
+   "tokens": 109,
    "result": "near-tie",
-   "diverged_at": 22,
+   "diverged_at": 73,
    "gap": 0.0
   },
   {
@@ -1172,33 +1180,27 @@
    "id": "long-39",
    "prompt_tokens": 1495,
    "tokens": 53,
-   "result": "near-tie",
-   "diverged_at": 11,
-   "gap": 0.0
+   "result": "exact"
   },
   {
    "id": "long-40",
    "prompt_tokens": 1757,
    "tokens": 128,
-   "result": "near-tie",
-   "diverged_at": 62,
-   "gap": 0.0
+   "result": "exact"
   },
   {
    "id": "long-41",
    "prompt_tokens": 1765,
-   "tokens": 120,
+   "tokens": 118,
    "result": "near-tie",
-   "diverged_at": 82,
+   "diverged_at": 68,
    "gap": 0.0
   },
   {
    "id": "long-42",
    "prompt_tokens": 1656,
    "tokens": 128,
-   "result": "failed",
-   "diverged_at": 50,
-   "gap": 0.125
+   "result": "exact"
   },
   {
    "id": "long-43",
@@ -1224,9 +1226,7 @@
    "id": "long-46",
    "prompt_tokens": 1949,
    "tokens": 113,
-   "result": "failed",
-   "diverged_at": 93,
-   "gap": 0.125
+   "result": "exact"
   },
   {
    "id": "long-47",
@@ -1238,9 +1238,7 @@
    "id": "long-48",
    "prompt_tokens": 1608,
    "tokens": 93,
-   "result": "near-tie",
-   "diverged_at": 56,
-   "gap": 0.0
+   "result": "exact"
   },
   {
    "id": "long-49",

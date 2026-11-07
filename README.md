@@ -21,7 +21,8 @@ exactly the same tokens as a plain one-request loop.
 *The live dashboard during a 64-user run: 55 requests generating in the same steps, 67%
 of prompt tokens served from the prefix cache, nothing paused for memory. In the step
 chart, flat teal steps are CUDA-graph replays; the tall amber spikes are steps where
-several waiting prompts are read together (prompt coalescing, below).*
+several waiting prompts are read together. The screenshot predates mixed-step graphs
+(below), which made those steps much shorter.*
 
 **Results:** every gate, every benchmark and every chart is in [RESULTS.md](RESULTS.md),
 with the headline numbers [below](#results).
@@ -63,8 +64,10 @@ builds every one of them by hand, explains each one, and shows them working live
 | Memory runs out mid-generation | **Preemption**: pause the newest request, free its memory, resume it later | No crashes, no out-of-memory errors |
 | Attention reads scattered memory | **Triton paged attention kernel**: reads keys and values straight from the blocks | No copying into a contiguous buffer |
 | Thousands of tiny GPU launches per word | **CUDA graphs**: each decode step recorded once and replayed | Python and launch overhead removed |
-| New prompts knock every step off the fast path | **Prompt coalescing**: newcomers wait a few steps and are read together, all chunks in one FlashAttention varlen call | 64-user throughput from 52% to 77% of vLLM |
-| Weights too big or too slow to read | **INT4 and FP8 weights**: 4-bit or 8-bit weights unpacked inside the matmul | Llama 3B: 6.2 GiB to 2.4 GiB, 2.8x faster |
+| New prompts knock every step off the fast path | **Mixed-step graphs**: steps that read prompts replay one graph per layer, with attention (one FlashAttention varlen call for all prompt chunks) in between | A step reading new prompts: 80 ms down to 25 ms |
+| Dozens of tiny kernels per layer | **Fused Triton kernels** for RMSNorm, RoPE and SiLU, and a decode attention kernel that reads each KV head once for all the query heads sharing it | Decode 7% faster with CUDA graphs, 21% without; bit for bit the same output |
+| HTTP work slows the engine down | **Engine in its own process**: the web server and the engine never wait on each other's Python | 16-user throughput 532 to 888 tokens/s, together with the two rows above |
+| Weights too big or too slow to read | **INT4 and FP8 weights**: 4-bit or 8-bit weights unpacked inside the matmul | Llama 3B: 6.3 GiB to 2.5 GiB, 2.4x faster |
 | One word per weight read | **Speculative decoding**: guess several words cheaply, check them all at once | Several words per pass, same output distribution |
 | Clients expect OpenAI | **OpenAI-compatible API** with streaming, cancellation, timeouts and load shedding | Works with existing tools |
 | Servers are black boxes | **Live dashboard** and Prometheus metrics | Every decision visible |
@@ -101,8 +104,9 @@ client  -->  FastAPI (engine/server/api.py)
                validates the request, applies the chat template, streams the reply
                 |
                 v
-             AsyncEngine (engine/server/async_engine.py)
-               one background thread owns the GPU; HTTP handlers never touch it
+             ProcessEngine (engine/server/process_engine.py)
+               the engine runs in a process of its own that owns the GPU;
+               requests go in over a pipe, each step's tokens come back in one message
                 |
                 v
              LLMEngine.step()  (engine/runtime/engine.py), in a loop:
@@ -136,18 +140,28 @@ request's blocks and skips that part of the computation. When the last owner fin
 named block is not erased. It stays findable until the memory is needed, oldest first.
 
 **Attention over pages.** Generating a token means comparing it against every earlier
-token's keys. The Triton kernel in `engine/kernels/paged_attention.py` runs one GPU
-program per request and attention head, walks the request's block table, and reads keys
-and values directly from wherever the blocks are, computing the softmax as it goes.
+token's keys. The Triton kernel in `engine/kernels/paged_attention.py` walks each
+request's block table and reads keys and values directly from wherever the blocks are,
+computing the softmax as it goes. Llama shares each key/value head between 4 query
+heads, so in BF16 one GPU program handles all 4 at once and reads each block only once.
 
 **Fewer launches.** A generation step for a small model is mostly overhead: hundreds of
-tiny GPU kernel launches driven from Python. The engine records each step once per batch
-size as a CUDA graph and replays it, so a whole forward pass becomes one launch.
+tiny GPU kernel launches driven from Python, about 44 µs each on this Windows laptop.
+The engine records each step once per batch size as a CUDA graph and replays it, so a
+whole forward pass becomes one launch. Steps that also read new prompts cannot be one
+graph, because their attention changes shape every time, so they are cut at attention:
+one graph per layer for everything else, attention run directly in between. And three
+chains of small operations (RMSNorm, rotary embeddings, SiLU) are fused into Triton
+kernels that round exactly where PyTorch rounds, bit for bit.
+
+**Two processes.** `engine serve` runs the engine in its own process. In one process,
+the web server's per-token work (JSON, sockets) and the engine's per-step work take
+turns on Python's single interpreter lock, and the engine's step kept waiting for it.
 
 **Smaller weights.** With `--quantization int4`, each weight matrix is stored as 4-bit
 numbers with a scale and offset for every group of 128. The GPU kernel unpacks them
 inside the matrix multiply, so a quarter of the bytes cross the memory bus. On Llama
-3.2 3B that takes peak memory from 6.2 GiB to 2.4 GiB and speed from 28 to 78 tokens per
+3.2 3B that takes peak memory from 6.3 GiB to 2.5 GiB and speed from 36 to 87 tokens per
 second. The same arithmetic says Llama 3.1 8B (15 GB in 16-bit) fits an 8 GB card in
 INT4; `engine info` prints the estimate, but 8B has not been benchmarked here yet.
 
@@ -176,12 +190,15 @@ tested for **identical output** against something simpler.
 | Block allocator | Leak and double-free checks after every operation and every engine step |
 | Triton kernel | A plain PyTorch implementation, 12 shapes and dtypes |
 | CUDA graphs | The same engine without graphs |
+| Mixed-step graphs | The same engine running those steps without graphs, FP32 and BF16, with chunking and prefix hits |
+| Fused kernels | The PyTorch operations they replace: bit for bit identical |
+| Engine in its own process | The engine in a thread, through the same HTTP API |
 | Speculative decoding | Plain greedy (exact), and a chi-square test on 10,000 samples for sampling |
 | HTTP API | The engine called directly; streamed text equals non-streamed text |
 
 ```bash
-pytest                       # 99 CPU tests, about 40 seconds
-pytest -m gpu                # 24 GPU tests: Triton kernel, varlen, CUDA graphs, INT4, FP8
+pytest                       # 100 CPU tests, about 25 seconds
+pytest -m gpu                # 36 GPU tests: Triton kernels, varlen, both kinds of CUDA graph, INT4, FP8
 ENGINE_MODEL_DIR=models/Llama-3.2-1B-Instruct pytest -m slow     # the 200-prompt gate
 ```
 
@@ -203,24 +220,31 @@ Measured on one **RTX 4060 Laptop GPU (8 GB)**, Windows 11, PyTorch 2.15, CUDA 1
 [docs/results.html](docs/results.html)); every number comes from a JSON file in
 [`bench/results/`](bench/results) and can be regenerated with `python bench/run_all.py`.
 
+Something on this machine changed between the evening of 6 November and the evening of
+7 November: kernel launches got cheaper and Hugging Face's own outputs shifted in their
+last bits (see *What did not work*). The engine's numbers below were all measured on
+the evening of 7 November, after the change. vLLM's are from 02:00 that day, and it is
+not known whether that was before or after.
+
 ### The gates
 
 | Gate | Result | What happened |
 | --- | --- | --- |
-| **1. Same answers as Hugging Face**, Llama 3.2 1B, FP32 | ✅ **pass** | 200 of 200 prompts identical: 18,894 tokens, not one differs |
-| **1. Same answers as Hugging Face**, Llama 3.2 3B, BF16 | ❌ **fail, 195 / 200** | 181 identical, 14 near-ties; 5 split where the top two choices were 0.125 apart (see below) |
-| **2. 64 users for 30 minutes** | ❌ **fail, as written** | 25,818 requests at 1,347 tokens/s: 0 errors, 0 out-of-memory, 0 preemptions, all KV memory returned. Fails only on its strictest check: 159 prompts got a different greedy answer on a repeat (see below) |
-| **3. 70% of vLLM's throughput** | ✅ **pass, 77%** | 1,360 vs 1,757 tokens/s at 64 users against vLLM v0.32.0 on the same GPU (73% in an earlier sweep); it started at 52% (see below) |
-| Unit and property tests (CPU) | ✅ pass | 99 passed in 36 s |
-| GPU tests (Triton kernel, CUDA graphs, INT4, FP8, varlen) | ✅ pass | 24 passed in 27 s |
+| **1. Same answers as Hugging Face**, Llama 3.2 1B, FP32 | ✅ **pass** | 200 of 200 prompts identical: 18,964 tokens, not one differs |
+| **1. Same answers as Hugging Face**, Llama 3.2 3B, BF16 | ❌ **fail, 193 / 200** | 182 identical, 11 near-ties; 7 split where the top two choices were one or two BF16 rounding steps apart (see below) |
+| **2. 64 users for 30 minutes** | ❌ **fail, as written** | 52,728 requests at 2,752 tokens/s: 0 errors, 0 out-of-memory, 0 preemptions, all KV memory returned. Fails only on its strictest check: 160 prompts got a different greedy answer on a repeat (see below) |
+| **3. 70% of vLLM's throughput** | ✅ **pass, 113%** | 1,982 vs 1,756 tokens/s at 64 users against vLLM v0.32.0 on the same GPU; it started at 52% (see below) |
+| Unit and property tests (CPU) | ✅ pass | 100 passed in 25 s |
+| GPU tests (Triton kernels, CUDA graphs, INT4, FP8, varlen) | ✅ pass | 36 passed in 13 s |
 
-**About the 5 failures on 3B.** At each one, Hugging Face's own top two candidate tokens
-were exactly 0.125 apart. That is one BF16 rounding step for logits of this size, the
-smallest difference BF16 can represent there, so the two implementations each rounded a
-coin flip differently. All five are long prompts (850 to 1,950 tokens), where rounding
-has the most steps to add up. The gate's rule asked for a gap under 0.01, which BF16
-cannot express at this scale, so it is reported as a failure, as written. The 1B run in
-FP32, where rounding is 65,000 times finer, matches every token.
+**About the 7 failures on 3B.** At six of them, Hugging Face's own top two candidate
+tokens were exactly 0.125 apart, at the seventh 0.25. That is one (or two) BF16 rounding
+steps for logits of this size, the smallest difference BF16 can represent there, so the
+two implementations each rounded a coin flip differently. All seven are in the long
+prompt set (280 to 1,415 tokens), where rounding has the most steps to add up. The
+gate's rule asked for a gap under 0.01, which BF16 cannot express at this scale, so it
+is reported as a failure, as written. The 1B run in FP32, where rounding is 65,000
+times finer, matches every token.
 
 ### One user: how fast does a reply stream?
 
@@ -228,22 +252,27 @@ Llama 3.2 1B, one request, 256 generated tokens. Each row adds one technique.
 
 | Engine | Tokens/s | ms per token | GPU memory |
 | --- | ---: | ---: | ---: |
-| Phase 1 loop (contiguous cache, plain PyTorch) | 16.6 | 60.2 | 2.33 GiB |
-| Paged cache, PyTorch attention | 9.9 | 100.7 | 2.37 GiB |
-| + Triton paged attention kernel | 17.5 | 57.2 | 2.37 GiB |
-| + CUDA graphs | **81.5** | 12.3 | 2.38 GiB |
-| + FP8 weights | 99.5 | 10.1 | 1.53 GiB |
-| + INT4 weights | **158.8** | 6.3 | 1.18 GiB |
+| Phase 1 loop (contiguous cache, plain PyTorch) | 58.5 | 17.1 | 2.33 GiB |
+| Paged cache, PyTorch attention | 42.2 | 23.7 | 2.37 GiB |
+| + Triton paged attention kernel | 63.2 | 15.8 | 2.37 GiB |
+| + CUDA graphs | **91.4** | 10.9 | 2.50 GiB |
+| + FP8 weights | 118.0 | 8.5 | 1.53 GiB |
+| + INT4 weights | **194.2** | 5.1 | 1.18 GiB |
 
 ![single-user decode speed, 1B](docs/results/decode-Llama-3.2-1B-Instruct.svg)
 
-Llama 3.2 3B: 9.8 tokens/s in the Phase 1 loop, **27.8** with CUDA graphs, 46.2 with
-FP8 and **78.2 with INT4** (2.44 GiB instead of 6.2 GiB).
+Llama 3.2 3B: 29.0 tokens/s in the Phase 1 loop, **36.5** with CUDA graphs, 52.0 with
+FP8 and **86.7 with INT4** (2.49 GiB instead of 6.34 GiB).
 
 The paged cache on its own is *slower* than the simple loop, because the reference path
 copies each request's keys and values out of the blocks before attention. The Triton
-kernel removes that copy, and CUDA graphs remove the Python and launch overhead, which is
-most of the cost for a model this small: 5x on its own.
+kernel removes that copy, and CUDA graphs remove the Python and launch overhead, which
+is much of the cost for a model this small.
+
+These are higher than on 6 November, when the same table read 16.6 tokens/s for the
+Phase 1 loop and 81.5 with CUDA graphs. Most of that is the machine, not the engine:
+with the fused kernels turned off the Phase 1 loop now does 48.5 and CUDA graphs 85.5.
+The fused kernels add the rest, 21% and 7%.
 
 ### Many users at once
 
@@ -252,18 +281,21 @@ completions back to back for 60 seconds.
 
 | Users | Tokens/s | Requests/s | First token, median | First token, p99 | Per token, median | Errors |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 71 | 0.8 | 96 ms | 339 ms | 13 ms | 0 |
-| 4 | 210 | 2.3 | 114 ms | 352 ms | 15 ms | 0 |
-| 16 | 534 | 5.5 | 143 ms | 626 ms | 20 ms | 0 |
-| 32 | 889 | 9.1 | 213 ms | 522 ms | 25 ms | 0 |
-| 64 | **1,360** | 14.3 | 389 ms | 677 ms | 35 ms | 0 |
-| 64, for 30 minutes (Gate 2) | 1,347 | 14.3 | 400 ms | 703 ms | 36 ms | 0 |
+| 1 | 82 | 1.0 | 28 ms | 204 ms | 11 ms | 0 |
+| 4 | 290 | 3.1 | 38 ms | 343 ms | 12 ms | 0 |
+| 16 | 888 | 9.2 | 53 ms | 319 ms | 14 ms | 0 |
+| 32 | 1,419 | 14.6 | 85 ms | 417 ms | 18 ms | 0 |
+| 64 | **1,982** | 20.9 | 184 ms | 1,779 ms | 24 ms | 0 |
+| 64, for 30 minutes (Gate 2) | **2,752** | 29.3 | 65 ms | 459 ms | 21 ms | 0 |
 
 ![throughput](docs/results/load-throughput.svg)
 
-Throughput grows 19x from 1 to 64 users while each user's stream slows only from 13 to
-35 ms per token, still about 29 tokens per second each, faster than anyone reads. Zero errors and zero preemptions at every level, and all KV memory
-returned at the end of every run.
+Throughput grows 24x from 1 to 64 users while each user's stream slows only from 11 to
+24 ms per token, still about 42 tokens per second each, faster than anyone reads. Zero
+errors and zero preemptions at every level, and all KV memory returned at the end of
+every run. A 60-second run is noisy at 64 users (an earlier sweep that morning, with a
+first RMSNorm kernel, gave 2,247); the 30-minute soak, at 2,752 tokens/s, is the
+steadier number.
 
 ### Against vLLM (Gate 3)
 
@@ -272,48 +304,67 @@ in Docker on the same laptop GPU: same model (Llama 3.2 1B, BF16), same 64-seque
 limit, vLLM's defaults otherwise (FlashAttention, `torch.compile`, CUDA graphs, prefix
 caching, chunked prefill).
 
-| Users | engine tok/s | vLLM tok/s | engine / vLLM | First token p50, engine / vLLM | Per token p50, engine / vLLM |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 71 | 86 | **83%** | 96 / 31 ms | 12.8 / 10.7 ms |
-| 4 | 210 | 319 | 66% | 114 / 50 ms | 15.0 / 11.3 ms |
-| 16 | 534 | 990 | 54% | 143 / 88 ms | 20.3 / 12.2 ms |
-| 32 | 889 | 1,360 | 65% | 213 / 168 ms | 25.4 / 13.9 ms |
-| 64 | **1,360** | 1,757 | **77%** | **389 / 414 ms** | 34.9 / 19.8 ms |
+| Users | engine tok/s | vLLM tok/s | engine / vLLM | First token p50, engine / vLLM | Per token p50, engine / vLLM | Per token p99, engine / vLLM |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 82 | 86 | 95% | 28 / 31 ms | 11.4 / 10.7 ms | |
+| 4 | 290 | 319 | 91% | 38 / 50 ms | 12.2 / 11.3 ms | |
+| 16 | 888 | 990 | 90% | 53 / 88 ms | 14.3 / 12.2 ms | 69 / 43 ms |
+| 32 | **1,419** | 1,360 | **104%** | 85 / 168 ms | 17.6 / 13.9 ms | 69 / 71 ms |
+| 64 | **1,982** | 1,756 | **113%** | **184 / 414 ms** | 23.8 / 19.8 ms | 134 / 138 ms |
 
 ![engine vs vLLM](docs/results/vs-vllm.svg)
 
-The gate asks for 70% at 64 users: the engine reaches **77%**, and 73% in an earlier sweep
-under the same conditions, so it **passes**. It did not at first: the first run reached
-52% (911 tokens/s). Profiling one step at a time showed why, and two changes fixed it.
+The gate asks for 70% at 64 users. The engine reaches **113%**: it serves more tokens
+per second than vLLM from 32 users up, and its first token arrives sooner at every
+load. It took three rounds of profiling to get here, starting at 52%.
 
-**1. Prompt coalescing.** With 64 users, someone finishes almost every other step and
-the next request arrives. Reading even a few prompt tokens forces the whole step off the
-CUDA graph onto the eager path, and on this machine an eager step costs about 85 ms
-however small it is (it is bound by launching ~700 small GPU operations from Python),
-against 20 ms for a graph step. So 41% of steps were eager and took 77% of the time. Now
-a new prompt may wait up to one step per 8 running requests (8 steps at 64 users, about
-150 ms) and is read together with whoever else arrived. Eager steps fell to 10%.
+vLLM still has the faster *typical* step (12.2 against 14.3 ms per token at 16 users)
+and a steadier tail at 16 users. Where the engine wins is getting new requests started:
+at 64 users its first token comes in 184 ms against vLLM's 414, and a whole request
+takes 3.01 s on average against 3.44 s.
 
-**2. One attention call for all prompt chunks.** The eager steps that remain now read
-several prompts at once, and attention handled them one chunk at a time in every layer.
-They now go through a single FlashAttention variable-length call
-(`torch.nn.attention.varlen`) per layer, which took an eager step from 195 to 88 ms.
+vLLM was measured at 02:00 on 7 November, possibly before the machine change described
+above. vLLM replays CUDA graphs for every step, so cheaper kernel launches should help
+it less than they helped the engine's slower paths, but a rerun on the same evening is
+still owed (Docker Desktop would not start).
 
-| Step | 64-user throughput, engine alone (no HTTP) |
-| --- | ---: |
-| Before | 941 tokens/s |
-| + prompt coalescing | 1,170 tokens/s |
-| + one varlen attention call | **1,588 tokens/s** |
+**Round 1: 52% to 77%.** With 64 users someone finishes almost every other step and the
+next request arrives. Reading even a few prompt tokens forced the whole step off the CUDA
+graph onto the slow path, about 85 ms however small it was, against 20 ms for a graph
+step. *Prompt coalescing* made newcomers wait a few steps so they could be read together,
+and *one FlashAttention varlen call* per layer replaced one attention call per prompt.
 
-The cost is a little latency at the start: first-token p50 at 64 users went from 247 to
-389 ms, still level with vLLM's 414. Coalescing only holds prompts when requests are
-decoding on CUDA graphs and switches itself off at 8 or fewer users;
-`--no-prefill-coalescing` turns it off entirely. The FP32 batching test below still
-gives 128 of 128 identical answers with both changes in.
+**Round 2: why was the slow path slow?** A profile of one such step: 14 ms of GPU work,
+77 ms of CPU time, almost all of it issuing 772 kernel launches at 44 µs each (Windows'
+display driver model makes launches expensive). So those steps now run as graphs too,
+cut at attention, whose shape changes every step: one graph per layer for the norm,
+projections, rotary embedding, cache write and MLP, and attention launched directly in
+between. 17 replays instead of 772 launches: **80 ms down to 25 ms**. Coalescing then
+only delayed prompts, so it is off by default now.
 
-vLLM is still about twice as fast per step at low load (12 against 20 ms at 16 users):
-it compiles the whole model into fused kernels with `torch.compile`, where the engine
-still launches each small operation separately and builds every step's batch in Python.
+**Round 3: the GPU and the web server.** With the slow steps gone, a decode step itself
+was the cost. About 35 tiny element-wise kernels per layer (norm, rotary, activation)
+became a few fused Triton kernels, and decode attention now reads each key/value block
+once for the 4 query heads that share it instead of 4 times: **7% off every decode
+step**, bit for bit the same output. Last, driving the engine with no HTTP gave 1,094
+tokens/s at 16 users, but through the server only 532. The web server's per-token Python and the engine's per-step
+Python were taking turns on one interpreter lock. Handing a step's tokens over in one
+wake-up instead of one per token, then moving the engine into its own process, closed
+that gap.
+
+| Change | 16 users | 64 users | vs vLLM at 64 |
+| --- | ---: | ---: | ---: |
+| First measurement | 535 | 911 | 52% |
+| + prompt coalescing, one varlen call (round 1) | 534 | 1,360 | 77% |
+| + mixed-step graphs (round 2) | 532 | 1,300 | 74% |
+| + fused kernels, GQA attention, engine process (round 3) | **888** | **1,982** | **113%** |
+
+Through HTTP, round 2 only shows up once round 3 removes the server bottleneck in front
+of it: driving the engine directly, round 2 alone took 16 users from 811 to 1,094
+tokens/s. Each change is tested for identical output against the slower path it
+replaces (below), and the FP32 batching test still gives 128 of 128 identical answers.
+The first round 3 sweep, that morning, reached 2,247 (128%), but with an RMSNorm kernel
+that changed answers (see *What did not work*); this is the sweep with the exact one.
 
 ### Batching changes rounding, not math
 
@@ -325,12 +376,12 @@ in batches of up to 64 with prompts arriving mid-flight and the prefix cache on.
 | Precision | Loaded requests | Same tokens as running alone | Different | Largest top-2 gap where they split |
 | --- | ---: | ---: | ---: | ---: |
 | FP32 | 128 | **128** | 0 | |
-| BF16 | 128 | 62 | 66 | 0.25 |
+| BF16 | 128 | 71 | 57 | 0.25 |
 
 In FP32 every token matches, so batching, paging and caching compute exactly the right
-thing. In BF16 half the answers drift, and every drift starts at a token where the
-model's top two choices were within 0.25 of each other (zero to two BF16 rounding steps):
-a different batch size changes the order numbers are added in, and that rounds a coin
+thing. In BF16 more than a third of the answers drift, and every drift starts at a token
+where the model's top two choices were within 0.25 of each other (one or two BF16
+rounding steps): a different batch size changes the order numbers are added in, and that rounds a coin
 flip the other way. vLLM does exactly the same: in the Gate 3 runs it returned a
 different greedy answer on repeat for 117 prompts at 64 users. Gate 2's
 strict "same answer every time" rule cannot pass in BF16 for that reason, so it is
@@ -352,19 +403,30 @@ both smaller and better than BF16 1B (12.01 vs 13.17, 2.45 vs 2.62 GiB).
 
 - **Speculative decoding is correct but slower here.** It passes the exactness and
   chi-square tests, and a 1B draft gets 56% of its guesses accepted on 3B. But the
-  verify pass runs without CUDA graphs, so on 3B it reaches 10.2 tokens/s against 27.8
+  verify pass runs without CUDA graphs, so on 3B it reaches 25.0 tokens/s against 36.5
   for plain decoding with graphs. Capturing the verify step in a graph is the next step.
-- **Long prompts on 3B in BF16** read at 685 tokens/s for 2,000 tokens against 3,650 for
-  512: the 6.2 GiB model leaves too little of the 8 GB card for long-prompt activations.
-  INT4 or FP8 fixes this.
 - **Repeat answers under load** differ in BF16 (above). Making BF16 batch-invariant
   needs kernels that add in a fixed order whatever the batch size, at some cost in
   speed.
 - **Two gates fail as written**: Gate 1 on 3B and Gate 2, both only on BF16 rounding
   ties. Their rules should measure gaps in BF16 rounding steps rather than a fixed 0.01.
-- **vLLM is still ahead at 4 to 32 users** (54 to 66%). Next: fuse the small per-layer
-  operations (norm, rotary, activation) so eager steps launch fewer kernels, and build
-  each step's batch on the GPU instead of in Python lists.
+- **vLLM still has the faster typical step**, 6 to 27% per token at every load, and is
+  ahead at 1 to 16 users (90 to 95%). The rest is GPU work: vLLM's `torch.compile`
+  fuses more (residual adds into the norms, the q/k/v and gate/up projections into one
+  multiply each). Merging projections was measured here and saved 5% of the multiply
+  time at 16 users while changing BF16 rounding, so it is not in yet.
+- **A test oracle went stale, and for a few hours it hid a real bug.** Gate 1 compares
+  against Hugging Face outputs cached on disk. On 7 November the same code that matched
+  all 200 the day before "failed" 41: Hugging Face itself, rerun, no longer produced its
+  own cached answers (on 3B in BF16, 82 of 200 changed), while the engine matched the
+  fresh run exactly. Something below PyTorch (same driver, same libraries) now rounds
+  differently. Against the fresh 3B reference, though, the first fused RMSNorm kernel
+  failed 27 prompts: it added up its squares in a different order than PyTorch. On
+  random data that had looked harmless (99.9% of outputs equal), but over 128 greedy
+  tokens it was enough. PyTorch now computes that sum and the kernel does the rest, bit
+  for bit, and 3B is back to 7 rounding ties. Lessons: test fused kernels for exact
+  equality, not "almost always", and give the cache a fingerprint of the GPU's own
+  output so it notices drift by itself.
 
 ## Quickstart
 
@@ -423,7 +485,9 @@ docker run --gpus all -p 8000:8000 -v "$PWD/models:/models" engine --model /mode
 | `--max-waiting` | 256 | Queue length before new requests get HTTP 429 |
 | `--timeout` | 600 | Seconds before a request is cancelled |
 | `--gpu-memory-utilization` | 0.9 | Share of GPU memory the KV cache may use |
-| `--no-prefix-caching`, `--no-chunked-prefill`, `--no-cuda-graphs` | | Turn a feature off to see what it was worth |
+| `--no-prefix-caching`, `--no-chunked-prefill`, `--no-cuda-graphs`, `--no-mixed-graphs` | | Turn a feature off to see what it was worth |
+| `--in-process-engine` | off | Run the engine in a thread of the web server's process |
+| `ENGINE_FUSED_KERNELS=0` | | Environment variable: plain PyTorch instead of the fused kernels |
 
 API: `POST /v1/chat/completions` and `POST /v1/completions` (streaming or not),
 `GET /v1/models`, `GET /dashboard`, `GET /debug/state`, `GET /metrics`, `GET /health`.
@@ -446,9 +510,9 @@ engine/
   model/        the Llama network in plain PyTorch, plus a loader that can quantize on the fly
   runtime/      the engine: scheduler, block manager, paged cache, CUDA graphs, sampler,
                 speculative decoding, and the original one-request loop kept as a test oracle
-  kernels/      the Triton paged-attention kernel
+  kernels/      Triton kernels: paged attention, fused RMSNorm, RoPE and SiLU
   quant/        INT4 and FP8 linear layers
-  server/       the OpenAI-compatible API, the background engine thread, the dashboard
+  server/       the OpenAI-compatible API, the engine process, the dashboard
 tests/          unit, property, GPU and golden tests
 bench/          speed, load, soak and perplexity benchmarks; results/ holds the numbers
 docs/           architecture notes
@@ -462,9 +526,9 @@ Triton and the standard library.
 
 Built in five phases, each closed by a measurable gate:
 
-1. **Correct baseline.** Own forward pass and sampler. Gate: identical to Hugging Face on 200 prompts. *Passed for 1B in FP32 (200/200); 3B in BF16 at 195/200, the 5 being one-rounding-step ties.*
-2. **Serving core.** Paged cache, continuous batching, Triton kernel, OpenAI API. Gate: 64 concurrent streams for 30 minutes with no errors or leaks. *Ran: 0 errors, 0 leaks, 1,347 tokens/s; fails only the strict repeat-answer check, which BF16 rounding breaks.*
-3. **Throughput and latency.** Chunked prefill, prefix caching, preemption, CUDA graphs, prompt coalescing. Gate: 70% of vLLM's throughput on the same GPU. *Passed: 77% of vLLM v0.32.0 at 64 users (52% before profiling).*
+1. **Correct baseline.** Own forward pass and sampler. Gate: identical to Hugging Face on 200 prompts. *Passed for 1B in FP32 (200/200); 3B in BF16 at 193/200, the 7 being one- or two-step rounding ties.*
+2. **Serving core.** Paged cache, continuous batching, Triton kernel, OpenAI API. Gate: 64 concurrent streams for 30 minutes with no errors or leaks. *Ran: 0 errors, 0 leaks, 52,728 requests at 2,752 tokens/s; fails only the strict repeat-answer check, which BF16 rounding breaks.*
+3. **Throughput and latency.** Chunked prefill, prefix caching, preemption, CUDA graphs, mixed-step graphs, fused kernels, a separate engine process. Gate: 70% of vLLM's throughput on the same GPU. *Passed: 113% of vLLM v0.32.0 at 64 users (52% at the first measurement).*
 4. **Quantization and speculation.** INT4, FP8, speculative decoding.
 5. **Hardening.** Load and soak tests, metrics, dashboard, Docker, docs.
 

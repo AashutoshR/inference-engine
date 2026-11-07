@@ -4,15 +4,25 @@
   "prompts": 64,
   "loaded_requests": 128,
   "max_batch": 64,
-  "identical": 62,
-  "differed": 66,
+  "identical": 71,
+  "differed": 57,
   "max_split_gap": 0.25,
   "cached_prompt_tokens": 3968,
-  "seconds": 129.9,
+  "seconds": 124.2,
   "splits": [
     {
       "request": "non-english#1",
-      "diverged_at": 37,
+      "diverged_at": 20,
+      "top2_gap": 0.0
+    },
+    {
+      "request": "chat-03#1",
+      "diverged_at": 93,
+      "top2_gap": 0.0
+    },
+    {
+      "request": "chat-05#1",
+      "diverged_at": 104,
       "top2_gap": 0.0
     },
     {
@@ -22,22 +32,27 @@
     },
     {
       "request": "chat-07#1",
-      "diverged_at": 9,
-      "top2_gap": 0.0
+      "diverged_at": 48,
+      "top2_gap": 0.125
     },
     {
       "request": "chat-09#1",
-      "diverged_at": 11,
+      "diverged_at": 16,
       "top2_gap": 0.125
     },
     {
       "request": "chat-10#1",
-      "diverged_at": 56,
-      "top2_gap": 0.25
+      "diverged_at": 5,
+      "top2_gap": 0.0
     },
     {
-      "request": "chat-13#1",
-      "diverged_at": 34,
+      "request": "chat-12#1",
+      "diverged_at": 112,
+      "top2_gap": 0.0
+    },
+    {
+      "request": "chat-14#1",
+      "diverged_at": 92,
       "top2_gap": 0.0
     },
     {
@@ -46,29 +61,24 @@
       "top2_gap": 0.0
     },
     {
-      "request": "chat-18#1",
-      "diverged_at": 109,
+      "request": "chat-17#1",
+      "diverged_at": 124,
       "top2_gap": 0.0
+    },
+    {
+      "request": "chat-18#1",
+      "diverged_at": 77,
+      "top2_gap": 0.25
     },
     {
       "request": "chat-20#1",
-      "diverged_at": 65,
-      "top2_gap": 0.0
-    },
-    {
-      "request": "chat-21#1",
-      "diverged_at": 85,
+      "diverged_at": 103,
       "top2_gap": 0.0
     },
     {
       "request": "chat-22#1",
-      "diverged_at": 54,
-      "top2_gap": 0.0
-    },
-    {
-      "request": "chat-23#1",
-      "diverged_at": 15,
-      "top2_gap": 0.0
+      "diverged_at": 17,
+      "top2_gap": 0.125
     },
     {
       "request": "chat-24#1",
@@ -77,87 +87,62 @@
     },
     {
       "request": "chat-28#1",
-      "diverged_at": 49,
-      "top2_gap": 0.0
-    },
-    {
-      "request": "chat-29#1",
-      "diverged_at": 119,
+      "diverged_at": 16,
       "top2_gap": 0.125
     },
     {
       "request": "chat-30#1",
-      "diverged_at": 15,
-      "top2_gap": 0.0
-    },
-    {
-      "request": "chat-31#1",
-      "diverged_at": 27,
+      "diverged_at": 50,
       "top2_gap": 0.0
     },
     {
       "request": "chat-32#1",
-      "diverged_at": 41,
-      "top2_gap": 0.125
+      "diverged_at": 24,
+      "top2_gap": 0.0
     },
     {
       "request": "chat-33#1",
       "diverged_at": 3,
-      "top2_gap": 0.0
+      "top2_gap": 0.125
     },
     {
       "request": "chat-34#1",
-      "diverged_at": 111,
+      "diverged_at": 34,
       "top2_gap": 0.0
     },
     {
-      "request": "code-01#1",
-      "diverged_at": 37,
+      "request": "code-05#1",
+      "diverged_at": 100,
       "top2_gap": 0.125
-    },
-    {
-      "request": "code-02#1",
-      "diverged_at": 55,
-      "top2_gap": 0.0
-    },
-    {
-      "request": "code-04#1",
-      "diverged_at": 98,
-      "top2_gap": 0.125
-    },
-    {
-      "request": "code-06#1",
-      "diverged_at": 35,
-      "top2_gap": 0.0
     },
     {
       "request": "code-08#1",
-      "diverged_at": 35,
-      "top2_gap": 0.0
-    },
-    {
-      "request": "code-09#1",
-      "diverged_at": 106,
+      "diverged_at": 21,
       "top2_gap": 0.125
     },
     {
-      "request": "code-11#1",
-      "diverged_at": 24,
-      "top2_gap": 0.25
+      "request": "code-10#1",
+      "diverged_at": 123,
+      "top2_gap": 0.0
     },
     {
-      "request": "code-14#1",
-      "diverged_at": 15,
+      "request": "code-11#1",
+      "diverged_at": 39,
+      "top2_gap": 0.125
+    },
+    {
+      "request": "code-15#1",
+      "diverged_at": 9,
       "top2_gap": 0.125
     },
     {
       "request": "code-18#1",
-      "diverged_at": 74,
-      "top2_gap": 0.0
+      "diverged_at": 42,
+      "top2_gap": 0.125
     },
     {
-      "request": "code-21#1",
-      "diverged_at": 2,
+      "request": "code-20#1",
+      "diverged_at": 65,
       "top2_gap": 0.0
     },
     {
@@ -172,18 +157,13 @@
     },
     {
       "request": "non-english#2",
-      "diverged_at": 37,
+      "diverged_at": 20,
       "top2_gap": 0.0
     },
     {
       "request": "multi-turn#2",
       "diverged_at": 17,
-      "top2_gap": 0.125
-    },
-    {
-      "request": "chat-05#2",
-      "diverged_at": 104,
-      "top2_gap": 0.125
+      "top2_gap": 0.0
     },
     {
       "request": "chat-06#2",
@@ -196,13 +176,8 @@
       "top2_gap": 0.125
     },
     {
-      "request": "chat-09#2",
-      "diverged_at": 11,
-      "top2_gap": 0.125
-    },
-    {
-      "request": "chat-10#2",
-      "diverged_at": 83,
+      "request": "chat-12#2",
+      "diverged_at": 112,
       "top2_gap": 0.0
     },
     {
@@ -212,78 +187,48 @@
     },
     {
       "request": "chat-14#2",
-      "diverged_at": 126,
-      "top2_gap": 0.125
-    },
-    {
-      "request": "chat-16#2",
-      "diverged_at": 73,
-      "top2_gap": 0.25
-    },
-    {
-      "request": "chat-17#2",
-      "diverged_at": 124,
-      "top2_gap": 0.125
-    },
-    {
-      "request": "chat-20#2",
-      "diverged_at": 65,
+      "diverged_at": 92,
       "top2_gap": 0.0
     },
     {
-      "request": "chat-21#2",
-      "diverged_at": 85,
+      "request": "chat-16#2",
+      "diverged_at": 75,
+      "top2_gap": 0.0
+    },
+    {
+      "request": "chat-20#2",
+      "diverged_at": 103,
       "top2_gap": 0.0
     },
     {
       "request": "chat-22#2",
-      "diverged_at": 54,
-      "top2_gap": 0.0
-    },
-    {
-      "request": "chat-23#2",
-      "diverged_at": 15,
-      "top2_gap": 0.0
-    },
-    {
-      "request": "chat-24#2",
-      "diverged_at": 33,
+      "diverged_at": 14,
       "top2_gap": 0.125
     },
     {
-      "request": "chat-28#2",
-      "diverged_at": 49,
+      "request": "chat-23#2",
+      "diverged_at": 58,
       "top2_gap": 0.0
+    },
+    {
+      "request": "chat-28#2",
+      "diverged_at": 16,
+      "top2_gap": 0.125
     },
     {
       "request": "chat-29#2",
       "diverged_at": 119,
-      "top2_gap": 0.125
-    },
-    {
-      "request": "chat-30#2",
-      "diverged_at": 15,
       "top2_gap": 0.0
     },
     {
       "request": "chat-32#2",
-      "diverged_at": 41,
-      "top2_gap": 0.125
-    },
-    {
-      "request": "chat-33#2",
-      "diverged_at": 3,
+      "diverged_at": 24,
       "top2_gap": 0.0
     },
     {
       "request": "chat-34#2",
       "diverged_at": 27,
-      "top2_gap": 0.125
-    },
-    {
-      "request": "code-01#2",
-      "diverged_at": 37,
-      "top2_gap": 0.125
+      "top2_gap": 0.0
     },
     {
       "request": "code-02#2",
@@ -291,53 +236,63 @@
       "top2_gap": 0.0
     },
     {
+      "request": "code-04#2",
+      "diverged_at": 81,
+      "top2_gap": 0.125
+    },
+    {
       "request": "code-05#2",
       "diverged_at": 100,
-      "top2_gap": 0.0
+      "top2_gap": 0.125
     },
     {
       "request": "code-06#2",
-      "diverged_at": 35,
-      "top2_gap": 0.0
-    },
-    {
-      "request": "code-07#2",
-      "diverged_at": 22,
+      "diverged_at": 53,
       "top2_gap": 0.125
     },
     {
       "request": "code-08#2",
-      "diverged_at": 35,
-      "top2_gap": 0.0
+      "diverged_at": 21,
+      "top2_gap": 0.125
     },
     {
       "request": "code-09#2",
-      "diverged_at": 55,
-      "top2_gap": 0.125
+      "diverged_at": 78,
+      "top2_gap": 0.0
     },
     {
-      "request": "code-11#2",
-      "diverged_at": 39,
-      "top2_gap": 0.125
+      "request": "code-10#2",
+      "diverged_at": 123,
+      "top2_gap": 0.0
     },
     {
       "request": "code-13#2",
       "diverged_at": 97,
-      "top2_gap": 0.0
+      "top2_gap": 0.125
     },
     {
       "request": "code-14#2",
-      "diverged_at": 15,
+      "diverged_at": 99,
+      "top2_gap": 0.0
+    },
+    {
+      "request": "code-15#2",
+      "diverged_at": 9,
       "top2_gap": 0.125
     },
     {
       "request": "code-18#2",
-      "diverged_at": 42,
-      "top2_gap": 0.125
+      "diverged_at": 124,
+      "top2_gap": 0.0
     },
     {
       "request": "code-22#2",
-      "diverged_at": 112,
+      "diverged_at": 37,
+      "top2_gap": 0.125
+    },
+    {
+      "request": "code-24#2",
+      "diverged_at": 14,
       "top2_gap": 0.125
     }
   ]

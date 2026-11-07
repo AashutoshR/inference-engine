@@ -106,3 +106,123 @@ class DecodeGraphs:
         self.tables[:n, :width].copy_(torch.tensor(rows, dtype=torch.int32))
         self.graphs[n].replay()
         return self.outputs[n][:b]
+
+
+# Mixed steps (some sequences reading prompt tokens) by total tokens in the step. Past
+# about 1,000 tokens the GPU work outlasts the launch overhead and graphs stop paying.
+TOKEN_BUCKETS = (16, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048)
+
+
+class MixedGraphs:
+    """Mixed steps as piecewise CUDA graphs.
+
+    A mixed step's attention changes shape every step (which rows decode, how long each
+    prompt chunk is), but everything else in the network works on the step's N tokens
+    row by row. So each layer is split at attention: one graph runs the previous layer's
+    o_proj, residual and MLP plus this layer's norm, q/k/v projections, RoPE and KV-cache
+    write; attention then runs eagerly between graphs, reading q and writing its output
+    at fixed addresses. That is num_layers + 1 replays and a handful of attention
+    launches per layer instead of ~770 launches, which on this machine cost ~44 us each.
+
+    N is padded up to a token bucket. Padding rows embed token 0, write their K/V into
+    the scratch block, and are never attended to or sampled, and every op outside
+    attention treats rows independently, so real rows compute exactly what they would
+    in an eager step.
+    """
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        cache: PagedKVCache,
+        scratch_block: int,
+        max_seqs: int,
+        max_tokens: int,
+    ) -> None:
+        self.model, self.cache = model, cache
+        cfg = model.cfg
+        dev = cache.k.device
+        dtype = model.model.embed_tokens.weight.dtype
+        cap = min(max_tokens, TOKEN_BUCKETS[-1])
+        self.sizes = [s for s in TOKEN_BUCKETS if s < cap] + [cap]
+        t, nh, hd = self.sizes[-1], cfg.num_attention_heads, cfg.head_dim
+        self.scratch_slot = scratch_block * cache.block_size
+        self.inputs = torch.zeros(2, t, dtype=torch.long, device=dev)  # token ids, positions
+        self.slots = torch.full((t,), self.scratch_slot, dtype=torch.long, device=dev)
+        self.last = torch.zeros(max_seqs, dtype=torch.long, device=dev)
+        self.x = torch.zeros(1, t, cfg.hidden_size, dtype=dtype, device=dev)  # residual
+        self.cos = torch.zeros(1, t, hd, device=dev)
+        self.sin = torch.zeros(1, t, hd, device=dev)
+        self.q = torch.zeros(t, nh, hd, dtype=dtype, device=dev)
+        self.attn = torch.zeros(t, nh, hd, dtype=dtype, device=dev)
+        self.logits = torch.zeros(max_seqs, 1, cfg.vocab_size, device=dev)
+        self.graphs: dict[int, list[torch.cuda.CUDAGraph]] = {}
+        self._capture()
+
+    def _piece(self, i: int, n: int) -> None:
+        """Graph i of a step with n (padded) tokens: the network from just after layer
+        i - 1's attention to just before layer i's (i = 0: from the embedding; i = L:
+        through the final norm and lm_head)."""
+        layers, n_layers = self.model.model.layers, len(self.model.model.layers)
+        x, cos, sin = self.x[:, :n], self.cos[:, :n], self.sin[:, :n]
+        if i == 0:
+            c, s = self.model.rotary(self.inputs[1:, :n])
+            cos.copy_(c)
+            sin.copy_(s)
+            new = self.model.model.embed_tokens(self.inputs[:1, :n])
+        else:
+            prev = layers[i - 1]
+            h = x + prev.self_attn.o_proj(self.attn[:n].flatten(1))[None]
+            new = h + prev.mlp(prev.post_attention_layernorm(h))
+        if i == n_layers:
+            last = new[0, self.last][:, None]
+            self.logits.copy_(self.model.lm_head(self.model.model.norm(last)).float())
+            return
+        x.copy_(new)
+        layer = layers[i]
+        q, k, v = layer.self_attn.project(layer.input_layernorm(new), cos, sin)
+        self.cache.write(i, k[0].transpose(0, 1), v[0].transpose(0, 1), self.slots[:n])
+        self.q[:n].copy_(q[0].transpose(0, 1))
+
+    @torch.inference_mode()
+    def _capture(self) -> None:
+        pool = None
+        pieces = len(self.model.model.layers) + 1
+        for n in reversed(self.sizes):  # largest first, so smaller graphs reuse its pool
+            side = torch.cuda.Stream()
+            side.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(side):
+                for _ in range(2):  # warm up: cuBLAS picks its kernels for this shape
+                    for i in range(pieces):
+                        self._piece(i, n)
+            torch.cuda.current_stream().wait_stream(side)
+            graphs = []
+            for i in range(pieces):
+                graph = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(graph, pool=pool):
+                    self._piece(i, n)
+                pool = graph.pool()
+                graphs.append(graph)
+            self.graphs[n] = graphs
+        torch.cuda.synchronize()
+
+    def can_run(self, num_tokens: int, num_seqs: int) -> bool:
+        return num_tokens <= self.sizes[-1] and num_seqs <= self.last.numel()
+
+    @torch.inference_mode()
+    def run(self, ids: list[int], positions: list[int], batch: PagedBatch) -> torch.Tensor:
+        """One mixed step: ids, positions of the step's tokens (flattened), and the step's
+        mixed PagedBatch -> logits [B, 1, vocab] for each sequence's last token."""
+        t, b = len(ids), batch.last_index.numel()
+        n = next(s for s in self.sizes if s >= t)
+        pad = [0] * (n - t)
+        self.inputs[:, :n].copy_(torch.tensor([ids + pad, positions + pad]), non_blocking=True)
+        self.slots[:t].copy_(batch.slot_mapping)
+        self.slots[t:n].fill_(self.scratch_slot)
+        self.last.zero_()  # stale indices could point past this bucket
+        self.last[:b].copy_(batch.last_index)
+        graphs, q, out = self.graphs[n], self.q[:t].transpose(0, 1), self.attn[:t]
+        for layer, graph in zip(self.model.model.layers, graphs, strict=False):
+            graph.replay()
+            layer.self_attn._mixed(q, batch, out=out)
+        graphs[-1].replay()
+        return self.logits[:b]

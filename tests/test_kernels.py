@@ -134,6 +134,51 @@ def test_mixed_steps_match_static_loop(budget, monkeypatch):
     assert eng.num_free_blocks == 64
 
 
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("budget", [4096, 8])
+def test_mixed_step_graphs_match_eager_steps(dtype, budget):
+    """Mixed steps replayed as piecewise CUDA graphs (padded to a token bucket, attention
+    eager in between) give the same tokens as the same engine running them eagerly:
+    prompts join while others decode, get chunked (budget 8) and hit the prefix cache."""
+    from engine.config import ModelConfig
+    from engine.model.llama import LlamaForCausalLM
+    from engine.runtime.engine import LLMEngine
+    from engine.runtime.params import SamplingParams
+    from tests.conftest import TINY_RAW
+    from tests.test_generate import ByteTokenizer
+
+    torch.manual_seed(0)
+    model = LlamaForCausalLM(ModelConfig.from_dict(TINY_RAW)).cuda().to(dtype).eval()
+    shared = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    prompts = {"a": [5, 6, 7], "b": shared + [1, 2], "c": [99], "d": shared + [3],
+               "e": list(range(20, 41)), "f": shared, "g": list(range(50, 90))}  # fmt: skip
+    params = SamplingParams(temperature=0, max_tokens=12)
+
+    def run(mixed_graphs):
+        eng = LLMEngine(
+            model, ByteTokenizer(), (), num_blocks=64, block_size=4, max_num_seqs=8,
+            max_num_batched_tokens=budget, use_triton=True, enable_cuda_graphs=True,
+            enable_mixed_graphs=mixed_graphs, coalesce_prefill=False, debug_checks=True,
+        )  # fmt: skip
+        got = {rid: [] for rid in prompts}
+        pending = list(prompts.items())
+        while pending or eng.has_unfinished():
+            if pending:
+                rid, p = pending.pop(0)
+                eng.add_request(rid, p, params)
+            for out in eng.step():
+                got[out.request_id].append(out.token_id)
+        assert eng.num_free_blocks == 64
+        return got, eng
+
+    want, eager = run(False)
+    got, eng = run(True)
+    assert got == want
+    assert not any(s["mixed_graph"] for s in eager.step_log)
+    assert sum(s["mixed_graph"] for s in eng.step_log) >= 3
+    assert eng.cached_prompt_tokens_total > 0
+
+
 def test_varlen_prompt_chunks_match_per_chunk_sdpa(monkeypatch):
     """BF16 mixed step: FlashAttention varlen over all prompt chunks gives the same
     attention as one SDPA per chunk (the FP32 path), to BF16 rounding."""
@@ -168,3 +213,42 @@ def test_varlen_prompt_chunks_match_per_chunk_sdpa(monkeypatch):
     assert slow.varlen is None and len(slow.chunks) == 3
     got, want = attn._mixed(q, fast).float(), attn._mixed(q, slow).float()
     assert torch.allclose(got, want, atol=2e-2, rtol=2e-2), (got - want).abs().max()
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_fused_rope_and_silu_are_bitwise_identical(dtype):
+    """The fused kernels round exactly where the PyTorch ops do."""
+    import torch.nn.functional as F
+
+    from engine.kernels import fused
+    from engine.model.layers import apply_rotary
+
+    torch.manual_seed(0)
+    n, nh, hd = 77, 8, 64
+    q = torch.randn(1, n, nh, hd, device="cuda").to(dtype)
+    pos = torch.arange(n, device="cuda")[None] * 37
+    inv = 1.0 / (500000 ** (torch.arange(0, hd, 2, device="cuda").float() / hd))
+    freqs = pos[..., None].float() * inv
+    emb = torch.cat((freqs, freqs), -1)
+    cos, sin = emb.cos(), emb.sin()
+    want, _ = apply_rotary(q.transpose(1, 2), q.transpose(1, 2), cos, sin)
+    got = q[0].clone()
+    fused.rope_(got, cos[0], sin[0])
+    assert torch.equal(want.transpose(1, 2)[0], got)
+
+    gate = (torch.randn(64, 1000, device="cuda") * 4).to(dtype)
+    up = torch.randn(64, 1000, device="cuda").to(dtype)
+    assert torch.equal(fused.silu_mul(gate, up), F.silu(gate) * up)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16, torch.float16])
+@pytest.mark.parametrize("dim", [2048, 3072])
+def test_fused_rms_norm_is_bitwise_identical(dtype, dim):
+    from engine.kernels import fused
+
+    torch.manual_seed(0)
+    x = (torch.randn(300, dim, device="cuda") * 3).to(dtype)
+    w = torch.randn(dim, device="cuda").to(dtype)
+    xf = x.float()
+    want = w * (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + 1e-5)).to(x.dtype)
+    assert torch.equal(fused.rms_norm(x, w, 1e-5), want)

@@ -85,14 +85,16 @@ class PagedBatch:
         query_lens: list[int],
         device: str | torch.device,
         use_kernel: bool = False,
+        force_mixed: bool = False,
     ) -> PagedBatch:
         """block_tables, context_lens (tokens in cache after this step, new ones included)
-        and query_lens (new tokens this step) per sequence, in flattened order."""
+        and query_lens (new tokens this step) per sequence, in flattened order.
+        force_mixed: the mixed layout even for one sequence (mixed-step CUDA graphs)."""
         bs = cache.block_size
         b, max_q, max_ctx = len(query_lens), max(query_lens), max(context_lens)
-        if use_kernel and max_q == 1:
+        if use_kernel and max_q == 1 and not force_mixed:
             return cls._decode(cache, block_tables, context_lens, device)
-        if use_kernel and b > 1:
+        if use_kernel and (b > 1 or force_mixed):
             return cls._mixed(cache, block_tables, context_lens, query_lens, device)
 
         slot_mapping, kv_slots = [], []
@@ -168,13 +170,16 @@ class PagedBatch:
         v_rows, v_slots, v_q, v_k = [], [], [], []
         start = 0
         for table, ctx, q in zip(block_tables, context_lens, query_lens, strict=True):
-            slots = [table[p // bs] * bs + p % bs for p in range(ctx)]
-            slot_mapping.extend(slots[ctx - q :])
-            if q == 1:
+            if q == 1:  # a decode row needs only its new token's slot, not the whole context
+                slot_mapping.append(table[(ctx - 1) // bs] * bs + (ctx - 1) % bs)
                 dec_rows.append(start)
                 dec_tables.append(table)
                 dec_ctx.append(ctx)
-            elif use_varlen:  # queries sit at the end of their context: bottom-right causal
+                start += 1
+                continue
+            slots = [table[p // bs] * bs + p % bs for p in range(ctx)]
+            slot_mapping.extend(slots[ctx - q :])
+            if use_varlen:  # queries sit at the end of their context: bottom-right causal
                 v_rows.extend(range(start, start + q))
                 v_slots.extend(slots)
                 v_q.append(q)

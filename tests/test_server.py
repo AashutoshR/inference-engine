@@ -241,3 +241,45 @@ def test_legacy_completion_logprobs(client):
 @pytest.mark.parametrize("patch", [{"logprobs": True, "top_logprobs": 21}, {"top_logprobs": 2}])
 def test_bad_logprob_requests_get_400(client, patch):
     assert client.post("/v1/chat/completions", json=chat_body(**patch)).status_code == 400
+
+
+def tiny_engine() -> LLMEngine:
+    """Module level, so a spawned engine process can import and call it."""
+    torch.manual_seed(0)
+    return make_engine(LlamaForCausalLM(ModelConfig.from_dict(TINY_RAW)).eval())
+
+
+def test_engine_in_its_own_process_serves_the_same_answers(model):
+    """`engine serve` runs the engine in a separate process: same API, same tokens, and
+    the engine process exits on shutdown."""
+    from engine.server.process_engine import ProcessEngine
+
+    runner = ProcessEngine(tiny_engine)
+    proc = runner._proc
+    try:
+        app = create_app(runner, ChatByteTokenizer(), "tiny", request_timeout=30)
+        with TestClient(app) as c:
+            assert c.get("/health").status_code == 200
+            got = c.post("/v1/chat/completions", json=chat_body()).json()
+            with c.stream("POST", "/v1/chat/completions", json=chat_body(stream=True)) as r:
+                events = sse_events(r)
+            too_long = c.post("/v1/completions",
+                              json={"prompt": [1] * 600, "max_tokens": 1})  # fmt: skip
+            for _ in range(100):
+                state = c.get("/debug/state")
+                if state.status_code == 200 and state.json()["totals"]["finished_requests"] >= 2:
+                    break
+                asyncio.run(asyncio.sleep(0.05))
+            metrics = c.get("/metrics").text
+    finally:
+        runner.shutdown()
+    assert not proc.is_alive()
+    with TestClient(create_app(make_engine(model), ChatByteTokenizer(), "tiny")) as c:
+        want = c.post("/v1/chat/completions", json=chat_body()).json()
+    assert got["choices"] == want["choices"] and got["usage"] == want["usage"]
+    streamed = "".join(e["choices"][0]["delta"].get("content", "")
+                       for e in events[:-1] if e["choices"])  # fmt: skip
+    assert streamed == want["choices"][0]["message"]["content"]
+    assert too_long.status_code == 400
+    assert state.json()["totals"]["finished_requests"] >= 2
+    assert "engine_generation_tokens_total 12.0" in metrics

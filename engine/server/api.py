@@ -136,16 +136,16 @@ class Metrics:
             registry=r,
         )
 
-    def on_step(self, engine: LLMEngine, outputs: list[RequestOutput], seconds: float) -> None:
-        self.step_time.observe(seconds)
-        self.gen_tokens.inc(len(outputs))
-        sched, bm = engine.scheduler, engine.block_manager
-        self.running.set(len(sched.running))
-        self.waiting.set(len(sched.waiting))
-        self.kv_used.set(1 - bm.num_free_blocks / bm.allocator.num_blocks)
-        self.preemptions.set(sched.num_preemptions)
-        if engine.prompt_tokens_total:
-            self.prefix_hit.set(engine.cached_prompt_tokens_total / engine.prompt_tokens_total)
+    def on_step(self, stats: dict, num_outputs: int) -> None:
+        """stats: async_engine.engine_stats() of the step just taken."""
+        self.step_time.observe(stats["seconds"])
+        self.gen_tokens.inc(num_outputs)
+        self.running.set(stats["running"])
+        self.waiting.set(stats["waiting"])
+        self.kv_used.set(stats["kv_used"])
+        self.preemptions.set(stats["preemptions"])
+        if stats["prefix_hit"] is not None:
+            self.prefix_hit.set(stats["prefix_hit"])
 
 
 # --- app ----------------------------------------------------------------------------------
@@ -156,16 +156,23 @@ def _error(status: int, message: str, kind: str) -> JSONResponse:
 
 
 def create_app(
-    engine: LLMEngine,
+    engine: LLMEngine | AsyncEngine,
     tokenizer: Any,
     model_name: str,
     *,
     max_waiting: int = 256,
     request_timeout: float | None = 600.0,
 ) -> FastAPI:
+    """engine: an LLMEngine (run in a thread of this process) or a ready runner, such as
+    a ProcessEngine that runs the engine in a process of its own."""
     metrics = Metrics()
-    runner = AsyncEngine(engine, max_waiting, request_timeout, on_step=metrics.on_step)
-    capacity = engine.scheduler.capacity_tokens
+    if isinstance(engine, LLMEngine):
+        runner = AsyncEngine(engine, max_waiting, request_timeout)
+    else:
+        runner = engine
+        runner.max_waiting, runner.request_timeout = max_waiting, request_timeout
+    runner.on_step = metrics.on_step
+    capacity = runner.capacity_tokens
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -187,7 +194,7 @@ def create_app(
 
     @app.get("/health")
     async def health() -> Response:
-        alive = runner._thread is not None and runner._thread.is_alive()
+        alive = runner.alive
         return Response(status_code=200 if alive else 503)
 
     dashboard_html = (Path(__file__).parent / "dashboard.html").read_text(encoding="utf-8")

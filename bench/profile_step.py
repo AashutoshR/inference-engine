@@ -34,6 +34,8 @@ def main() -> None:
     p.add_argument("--top", type=int, default=25)
     p.add_argument("--profile", action="store_true", help="also run cProfile (slows steps)")
     p.add_argument("--no-coalesce", action="store_true", help="admit prompts every step")
+    p.add_argument("--coalesce", action="store_true", help="hold prompts (default: engine's)")
+    p.add_argument("--no-mixed-graphs", action="store_true", help="mixed steps run eagerly")
     args = p.parse_args()
 
     import torch
@@ -49,8 +51,9 @@ def main() -> None:
     rows = [json.loads(line) for line in PROMPTS.read_text("utf-8").splitlines() if line]
     prompts = itertools.cycle([chat_prompt_ids(tok, r["messages"]) for r in rows])
     model = load_model(args.model, device="cuda", dtype=torch.bfloat16)
-    engine = LLMEngine(model, tok, load_stop_token_ids(args.model),
-                       coalesce_prefill=False if args.no_coalesce else None)  # fmt: skip
+    coalesce = False if args.no_coalesce else True if args.coalesce else None
+    engine = LLMEngine(model, tok, load_stop_token_ids(args.model), coalesce_prefill=coalesce,
+                       enable_mixed_graphs=False if args.no_mixed_graphs else None)  # fmt: skip
     params = SamplingParams(temperature=0, max_tokens=args.max_tokens)
     counter = itertools.count()
 
@@ -76,20 +79,20 @@ def main() -> None:
     elapsed = time.perf_counter() - start
 
     log = [s for s in engine.step_log if s["step"] > first]
-    graph = [s["ms"] for s in log if s["graph"] and not s.get("split")]
-    split = [s["ms"] for s in log if s.get("split")]
-    eager = [s["ms"] for s in log if not s["graph"]]
+    graph = [s["ms"] for s in log if s["graph"]]
+    mixed_graph = [s["ms"] for s in log if s["mixed_graph"]]
+    eager = [s["ms"] for s in log if not s["graph"] and not s["mixed_graph"]]
     steps = engine.steps_total - first
     print(f"{args.concurrency} in flight: {steps} steps in {elapsed:.2f} s = "
           f"{steps / elapsed:.1f} steps/s, {tokens / elapsed:.0f} tokens/s "
           f"(step kinds below from the last {len(log)} steps)")  # fmt: skip
-    for name, ms in (("graph (decode only)", graph), ("split (graph + eager)", split),
+    for name, ms in (("graph (decode only)", graph), ("mixed graph (prompt tokens)", mixed_graph),
                      ("eager", eager)):  # fmt: skip
         if ms:
             print(f"  {name:26} {len(ms):4} steps ({len(ms) / len(log):.0%}), median "
                   f"{statistics.median(ms):.1f} ms, total {sum(ms) / 1000:.2f} s")  # fmt: skip
-    mixed = [s["prefill_tokens"] for s in log if s.get("split") or not s["graph"]]
-    print(f"  prompt tokens per split or eager step: {statistics.mean(mixed or [0]):.0f}")
+    mixed = [s["prefill_tokens"] for s in log if not s["graph"]]
+    print(f"  prompt tokens per step that reads prompts: {statistics.mean(mixed or [0]):.0f}")
     if not args.profile:
         return
     out = io.StringIO()

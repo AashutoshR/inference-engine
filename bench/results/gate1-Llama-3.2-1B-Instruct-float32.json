@@ -7,8 +7,8 @@
  "exact": 200,
  "near_ties": 0,
  "failed": 0,
- "tokens_compared": 18894,
- "seconds": 1509.3,
+ "tokens_compared": 18964,
+ "seconds": 523.2,
  "outcomes": [
   {
    "id": "chat-short",
@@ -43,7 +43,7 @@
   {
    "id": "multi-turn",
    "prompt_tokens": 62,
-   "tokens": 35,
+   "tokens": 47,
    "result": "exact"
   },
   {
@@ -469,7 +469,7 @@
   {
    "id": "math-13",
    "prompt_tokens": 47,
-   "tokens": 111,
+   "tokens": 107,
    "result": "exact"
   },
   {
@@ -499,7 +499,7 @@
   {
    "id": "math-18",
    "prompt_tokens": 45,
-   "tokens": 53,
+   "tokens": 58,
    "result": "exact"
   },
   {
@@ -541,7 +541,7 @@
   {
    "id": "lang-06",
    "prompt_tokens": 50,
-   "tokens": 128,
+   "tokens": 90,
    "result": "exact"
   },
   {
@@ -607,7 +607,7 @@
   {
    "id": "lang-17",
    "prompt_tokens": 48,
-   "tokens": 92,
+   "tokens": 74,
    "result": "exact"
   },
   {
@@ -619,7 +619,7 @@
   {
    "id": "lang-19",
    "prompt_tokens": 49,
-   "tokens": 73,
+   "tokens": 85,
    "result": "exact"
   },
   {
@@ -643,7 +643,7 @@
   {
    "id": "lang-23",
    "prompt_tokens": 57,
-   "tokens": 80,
+   "tokens": 128,
    "result": "exact"
   },
   {
@@ -751,7 +751,7 @@
   {
    "id": "multi-03",
    "prompt_tokens": 67,
-   "tokens": 64,
+   "tokens": 71,
    "result": "exact"
   },
   {
@@ -817,13 +817,13 @@
   {
    "id": "multi-14",
    "prompt_tokens": 83,
-   "tokens": 64,
+   "tokens": 60,
    "result": "exact"
   },
   {
    "id": "system-01",
    "prompt_tokens": 52,
-   "tokens": 117,
+   "tokens": 128,
    "result": "exact"
   },
   {
@@ -961,7 +961,7 @@
   {
    "id": "long-08",
    "prompt_tokens": 402,
-   "tokens": 119,
+   "tokens": 126,
    "result": "exact"
   },
   {
@@ -979,7 +979,7 @@
   {
    "id": "long-11",
    "prompt_tokens": 714,
-   "tokens": 25,
+   "tokens": 32,
    "result": "exact"
   },
   {
@@ -991,7 +991,7 @@
   {
    "id": "long-13",
    "prompt_tokens": 548,
-   "tokens": 112,
+   "tokens": 106,
    "result": "exact"
   },
   {
@@ -1087,7 +1087,7 @@
   {
    "id": "long-29",
    "prompt_tokens": 1135,
-   "tokens": 62,
+   "tokens": 115,
    "result": "exact"
   },
   {
@@ -1099,7 +1099,7 @@
   {
    "id": "long-31",
    "prompt_tokens": 1415,
-   "tokens": 24,
+   "tokens": 32,
    "result": "exact"
   },
   {
@@ -1141,7 +1141,7 @@
   {
    "id": "long-38",
    "prompt_tokens": 1270,
-   "tokens": 115,
+   "tokens": 108,
    "result": "exact"
   },
   {
@@ -1171,7 +1171,7 @@
   {
    "id": "long-43",
    "prompt_tokens": 1417,
-   "tokens": 80,
+   "tokens": 75,
    "result": "exact"
   },
   {
@@ -1201,7 +1201,7 @@
   {
    "id": "long-48",
    "prompt_tokens": 1608,
-   "tokens": 102,
+   "tokens": 84,
    "result": "exact"
   },
   {

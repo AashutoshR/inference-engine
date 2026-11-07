@@ -3,56 +3,56 @@
     "mode": "static",
     "quant": "none",
     "spec": null,
-    "decode_tokens_per_s": 16.6,
-    "itl_ms": 60.18,
+    "decode_tokens_per_s": 58.5,
+    "itl_ms": 17.09,
     "peak_memory_gib": 2.33
   },
   {
     "mode": "eager",
     "quant": "none",
     "spec": null,
-    "decode_tokens_per_s": 9.9,
-    "itl_ms": 100.7,
+    "decode_tokens_per_s": 42.2,
+    "itl_ms": 23.7,
     "peak_memory_gib": 2.37
   },
   {
     "mode": "triton",
     "quant": "none",
     "spec": null,
-    "decode_tokens_per_s": 17.5,
-    "itl_ms": 57.24,
+    "decode_tokens_per_s": 63.2,
+    "itl_ms": 15.82,
     "peak_memory_gib": 2.37
   },
   {
     "mode": "graphs",
     "quant": "none",
     "spec": null,
-    "decode_tokens_per_s": 81.5,
-    "itl_ms": 12.27,
-    "peak_memory_gib": 2.38
+    "decode_tokens_per_s": 91.4,
+    "itl_ms": 10.94,
+    "peak_memory_gib": 2.5
   },
   {
     "mode": "graphs",
     "quant": "int4",
     "spec": null,
-    "decode_tokens_per_s": 158.8,
-    "itl_ms": 6.3,
+    "decode_tokens_per_s": 194.2,
+    "itl_ms": 5.15,
     "peak_memory_gib": 1.18
   },
   {
     "mode": "graphs",
     "quant": "fp8",
     "spec": null,
-    "decode_tokens_per_s": 99.5,
-    "itl_ms": 10.06,
+    "decode_tokens_per_s": 118.0,
+    "itl_ms": 8.48,
     "peak_memory_gib": 1.53
   },
   {
     "mode": "spec",
     "quant": "none",
     "spec": "ngram",
-    "decode_tokens_per_s": 18.7,
-    "itl_ms": 53.55,
+    "decode_tokens_per_s": 54.5,
+    "itl_ms": 18.36,
     "peak_memory_gib": 2.41,
     "acceptance_rate": 0.093,
     "tokens_per_target_pass": 1.18

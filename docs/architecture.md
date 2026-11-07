@@ -1,22 +1,28 @@
 # Architecture
 
 `engine` is a single-node LLM inference server for Llama-architecture models. One
-process owns one GPU. This document follows a request from HTTP to tokens and back,
-then covers memory, correctness and the performance features.
+engine process owns one GPU; `engine serve` puts HTTP in a second process. This document
+follows a request from HTTP to tokens and back, then covers memory, correctness and the
+performance features.
 
 ```
-HTTP clients  -->  FastAPI (engine/server/api.py)               asyncio event loop
+HTTP clients  -->  FastAPI (engine/server/api.py)               HTTP process, asyncio
                      |  validate, apply chat template, 400 / 429 / 504
                      v
-                   AsyncEngine (engine/server/async_engine.py)   one background thread
-                     |  admit new requests, apply aborts, step(), route outputs
+                   ProcessEngine (engine/server/process_engine.py)
+                     |  streams, timeouts, aborts; two pipes to the engine process
+                     v
+                   engine process loop                          its own process and GIL
+                     |  admit new requests, apply aborts, step(), send outputs
                      v
                    LLMEngine.step() (engine/runtime/engine.py)
                      +- Scheduler.schedule()       which sequences, how many tokens each
                      |    +- BlockManager          KV blocks, prefix cache, refcounts
                      +- build PagedBatch           flattened tokens + slot mapping
-                     +- model forward              decode: CUDA graph replay
-                     |    +- Attention._paged      decode: Triton kernel, else PyTorch
+                     +- model forward              decode: one CUDA graph replay
+                     |                             mixed: a graph per layer, attention between
+                     |    +- Attention._paged      Triton kernel for decode rows,
+                     |                             FlashAttention varlen for prompt chunks
                      +- sample + OutputProcessor   tokens to text deltas, stop rules
 ```
 
@@ -29,13 +35,23 @@ HTTP clients  -->  FastAPI (engine/server/api.py)               asyncio event lo
    request (400) or a timeout (504) is still a clean JSON error. Streaming responses are
    server-sent events in OpenAI's chunk format, ending with `data: [DONE]`.
 
-2. **AsyncEngine** (`engine/server/async_engine.py`). The engine is not thread-safe, so
-   exactly one thread touches it. Handlers enqueue `(id, prompt, params)` and get an
-   async iterator backed by an `asyncio.Queue`; the engine thread delivers outputs with
-   `call_soon_threadsafe`. Leaving the iterator early (client disconnect, timeout,
-   exception) queues an abort, and the next loop iteration frees the request's KV
-   blocks. A failed engine step (e.g. a CUDA error) fails the in-flight requests and the
-   loop keeps serving.
+2. **ProcessEngine** (`engine/server/process_engine.py`), built on **AsyncEngine**
+   (`engine/server/async_engine.py`). The engine is not thread-safe, so exactly one
+   thread touches it. Handlers get an async iterator backed by an `asyncio.Queue`.
+   Leaving the iterator early (client disconnect, timeout, exception) sends an abort,
+   and the engine frees the request's KV blocks before its next step. A failed engine
+   step (e.g. a CUDA error) fails the in-flight requests and the loop keeps serving.
+
+   `engine serve` runs the engine in a **process of its own** (spawned, never forked).
+   In one process the engine thread and the HTTP thread share one GIL: streaming a
+   token costs the HTTP side a few hundred microseconds of Python (JSON, Starlette, a
+   socket write), and with 16 to 64 streams that work kept taking the GIL in the middle
+   of the engine's step. Now requests go over one pipe and each step comes back as one
+   message holding all its outputs (token ids and detokenized text) and the metrics. If
+   the HTTP process dies, the engine process sees its pipe close and exits, so nothing
+   keeps holding the GPU. `--in-process-engine` keeps the engine in a thread instead
+   (most tests use that); either way a step's outputs reach the event loop with one
+   wake-up, not one per token.
 
 3. **LLMEngine.step()** (`engine/runtime/engine.py`) runs one scheduler step, one model
    forward pass and one round of sampling. Greedy rows are sampled with a single
@@ -50,14 +66,15 @@ leave the batch at every step. Each step has a token budget (`max_num_batched_to
   sequence part-way through its prompt gets the next chunk (**chunked prefill**), so a
   2,000-token prompt never stalls the decodes around it.
 - Leftover budget admits waiting sequences, at most `max_num_seqs` running.
-- **Prompt coalescing** (on with CUDA graphs): a step that reads any prompt tokens
-  cannot replay a decode graph, and an eager step costs about four graph steps however
-  few tokens it reads, because it is bound by launching ~700 small GPU operations from
-  Python. So while sequences are decoding, a new prompt may wait up to one step per 8
-  running sequences (8 steps at 64) and is then read together with the others that
-  arrived meanwhile. It is admitted at once when nothing is decoding or when the step is
-  eager anyway. On the 64-user benchmark this took eager steps from 41% to 10% of all
-  steps. `--no-prefill-coalescing` turns it off.
+- **Prompt coalescing** (on only when mixed-step graphs are off, e.g. with FP8): a
+  step that reads any prompt tokens cannot replay a decode graph, and an eager step
+  costs about four graph steps however few tokens it reads, because it is bound by
+  launching ~770 small GPU operations from Python. So while sequences are decoding, a
+  new prompt may wait up to one step per 8 running sequences (8 steps at 64) and is
+  then read together with the others that arrived meanwhile. With mixed-step graphs
+  (below) a step that reads prompts costs little more than a decode step, so holding
+  prompts would only delay them, and coalescing is off. `--no-prefill-coalescing`
+  turns it off in every case.
 - If a running sequence needs a KV block and none is free, the newest running
   sequence is **preempted**: its blocks are freed and it goes back to the front of the
   queue to be recomputed later. Its full blocks stay in the prefix cache, so the
@@ -95,9 +112,14 @@ the resulting capacity.
 All attention runs over the flattened tokens of a step, `[1, N]`.
 
 - **Decode steps** (one new token per sequence) use the Triton kernel in
-  `engine/kernels/paged_attention.py`: one program per (sequence, query head) walks the
-  context through the block table in tiles, with an online softmax, reading K/V
-  straight from the paged cache. GQA maps query head `h` to KV head `h // groups`.
+  `engine/kernels/paged_attention.py`: each program walks a sequence's context through
+  the block table in tiles, with an online softmax, reading K/V straight from the paged
+  cache. In BF16/FP16 there is one program per (sequence, KV head): the query heads
+  that share that KV head (4 in Llama 3.2 1B) are the rows of one small matrix, so each
+  K/V tile is read once and both products run on the matrix units (`tl.dot`), with the
+  softmax weights rounded to BF16 before multiplying V as FlashAttention does. In FP32
+  there is one program per (sequence, query head), all in float32, which keeps the FP32
+  reference mode as exact as before.
 - **Mixed steps** (several sequences, some reading prompt tokens) send the decode rows
   through the same Triton kernel and all prompt chunks through **one FlashAttention
   varlen call** (`torch.nn.attention.varlen`): every chunk's context is gathered back to
@@ -111,11 +133,42 @@ All attention runs over the flattened tokens of a step, `[1, N]`.
 
 ## CUDA graphs
 
-`engine/runtime/cuda_graphs.py` captures the whole decode forward pass once per
-batch-size bucket (1, 2, 4, 8, 16, 24, 32, 48, 64, …). Inputs live in static buffers;
-a step of B sequences copies its data in, pads to the next bucket, and replays. Padding
-rows read and write only the scratch block. The Triton kernel reads each sequence's
-length from GPU memory, so one graph serves every context length.
+`engine/runtime/cuda_graphs.py` has two kinds.
+
+**Decode graphs** capture the whole decode forward pass once per batch-size bucket
+(1, 2, 4, 8, 16, 24, 32, 48, 64, …). Inputs live in static buffers; a step of B
+sequences copies its data in, pads to the next bucket, and replays. Padding rows read
+and write only the scratch block. The Triton kernel reads each sequence's length from
+GPU memory, so one graph serves every context length.
+
+**Mixed-step graphs** (`MixedGraphs`) cover steps that read prompt tokens. Their
+attention changes shape every step (which rows decode, how long each chunk is), but the
+rest of the network treats the step's N tokens row by row. So each layer is split at
+attention: one graph runs the previous layer's o_proj, residual and MLP plus this
+layer's norm, q/k/v projections, RoPE and KV-cache write; attention runs eagerly in
+between, reading q from and writing its output to fixed addresses. That is 17 replays
+(16 layers + 1) and a few attention launches per layer instead of ~770 launches, which
+on this Windows laptop cost about 44 µs each: a step reading 40 prompt tokens next to
+15 decodes did 14 ms of GPU work in 77 ms, and now takes about 25 ms. N is padded to a
+token bucket (16, 32, ... 2,048; longer steps are bound by GPU math, not launches, and
+stay eager); padding rows embed token 0, write K/V to the scratch block, and are never
+attended to or sampled. Off for FP8, whose per-step activation scale padding rows
+could change. `--no-mixed-graphs` turns it off.
+
+## Fused kernels
+
+`engine/kernels/fused.py` replaces three chains of small PyTorch ops with Triton
+kernels: RoPE for q and for k (12 ops, now 2 kernels), SiLU times the up projection
+(2, now 1), and the element-wise part of RMSNorm (add, rsqrt, multiply, cast, scale:
+now 1 kernel, after PyTorch's own cast, square and mean). That removes about 17
+kernels per layer, roughly 270 per step. Each kernel rounds where PyTorch rounds (and
+turns off multiply-add fusion, which would skip a rounding), so all three are bitwise
+identical to the unfused ops in every dtype.
+
+RMSNorm's mean stays in PyTorch on purpose. A first version fused it too, with its sum
+of squares added in a different order. Tests on random data looked fine (99.9% of BF16
+outputs equal, the rest one rounding step apart), but on Llama 3.2 3B in BF16 it
+changed 27 of Gate 1's 200 greedy answers. `ENGINE_FUSED_KERNELS=0` turns them all off.
 
 ## Model and weights
 
@@ -157,6 +210,9 @@ Every optimization is tested for *identical output* against something simpler:
 | Block allocator | Invariant checks after every operation and every engine step |
 | Triton kernel | A per-sequence PyTorch implementation |
 | CUDA graphs | The same engine without graphs |
+| Mixed-step graphs | The same engine running those steps eagerly (FP32 and BF16, with chunking and prefix hits) |
+| Fused kernels | The PyTorch ops they replace: bitwise equal in FP32, BF16 and FP16 |
+| Engine in its own process | The in-process engine through the same API: same answers, streamed and not |
 | Speculative decoding | Plain greedy (exact) and a chi-square test (sampled) |
 | HTTP API | The engine called directly; streaming text equals non-streaming |
 
@@ -172,12 +228,14 @@ entry per token. The dashboard playground uses them to tint each token by certai
 ## Observability
 
 `/dashboard` is a single HTML page served by the engine. It polls `/debug/state`, a
-snapshot the engine thread takes at most every 250 ms (`LLMEngine.snapshot()`): one
+snapshot the engine loop takes at most every 250 ms (`LLMEngine.snapshot()`) and, in
+process mode, sends to the HTTP process: one
 character per KV block (free, cached, owned, shared) with its owner, every running and
 waiting sequence, totals, and a log of the last 120 steps (tokens, prefill/decode mix,
-milliseconds, whether a CUDA graph ran). Taking the snapshot on the engine thread means
-no locks in the hot path and a consistent picture.
+milliseconds, whether a decode or mixed-step CUDA graph ran). Taking the snapshot on the
+engine's own thread means no locks in the hot path and a consistent picture.
 
 `/metrics` (Prometheus): requests by outcome, prompt and generated tokens, TTFT, ITL,
 step time, running and waiting sequences, KV blocks in use, preemptions and the
-prefix-cache hit ratio. `/health` reports whether the engine thread is alive.
+prefix-cache hit ratio. `/health` reports whether the engine (its process, and the
+thread that reads its results) is alive.

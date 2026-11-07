@@ -59,6 +59,7 @@ class LLMEngine:
         enable_chunked_prefill: bool = True,
         use_triton: bool | None = None,
         enable_cuda_graphs: bool | None = None,
+        enable_mixed_graphs: bool | None = None,
         coalesce_prefill: bool | None = None,
         max_model_len: int | None = None,
         debug_checks: bool = False,
@@ -96,10 +97,24 @@ class LLMEngine:
             self.graphs = DecodeGraphs(
                 model, self.cache, num_blocks, max_num_seqs, -(-self.max_model_len // block_size)
             )
-        # Holding new prompts for a few steps only pays when decode steps are graphs.
-        self.scheduler.coalesce_prefill = (
-            self.graphs is not None if coalesce_prefill is None else coalesce_prefill
-        )
+        # Mixed steps as piecewise graphs. Not with FP8: its activation scale is the max
+        # over the whole step, so padding rows could change what real rows compute.
+        if enable_mixed_graphs is None:
+            enable_mixed_graphs = self.graphs is not None and _quantization_of(model) != "fp8"
+        self.mixed_graphs = None
+        if enable_mixed_graphs:
+            if self.graphs is None:
+                raise ValueError("mixed-step graphs need decode CUDA graphs")
+            from engine.runtime.cuda_graphs import MixedGraphs
+
+            self.mixed_graphs = MixedGraphs(
+                model, self.cache, num_blocks, max_num_seqs, max_num_batched_tokens
+            )
+        # Holding new prompts for a few steps only pays when decode steps are graphs and
+        # steps that read prompts are not: with mixed-step graphs those are cheap too.
+        if coalesce_prefill is None:
+            coalesce_prefill = self.graphs is not None and self.mixed_graphs is None
+        self.scheduler.coalesce_prefill = coalesce_prefill
         self.prompt_tokens_total = 0
         self.cached_prompt_tokens_total = 0
         self.debug_checks = debug_checks
@@ -184,7 +199,7 @@ class LLMEngine:
         decode_only = len(ids) == len(seqs)
         decode_tokens = sum(1 for s, n in zip(seqs, batch.num_tokens, strict=True)
                             if n == 1 and s.output_ids)  # fmt: skip
-        used_graph = False
+        used_graph = used_mixed_graph = False
         if (
             self.graphs is not None
             and decode_only
@@ -195,6 +210,13 @@ class LLMEngine:
             ]
             logits = self.graphs.run(ids, positions, slots, tables, context_lens)[:, 0]
             used_graph = True
+        elif self.mixed_graphs is not None and self.mixed_graphs.can_run(len(ids), len(seqs)):
+            paged = PagedBatch.build(
+                self.cache, tables, context_lens, batch.num_tokens, self.device,
+                use_kernel=True, force_mixed=True,
+            )  # fmt: skip
+            logits = self.mixed_graphs.run(ids, positions, paged)[:, 0]
+            used_mixed_graph = True
         else:
             paged = PagedBatch.build(
                 self.cache, tables, context_lens, batch.num_tokens, self.device,
@@ -253,6 +275,7 @@ class LLMEngine:
             "prefill_tokens": len(ids) - decode_tokens,
             "decode_tokens": decode_tokens,
             "graph": used_graph,
+            "mixed_graph": used_mixed_graph,
             "preempted": self.scheduler.num_preemptions - preempted_before,
         })  # fmt: skip
         return outputs
@@ -328,6 +351,7 @@ class LLMEngine:
                 "max_num_batched_tokens": sched.max_num_batched_tokens,
                 "triton": self.use_triton,
                 "cuda_graphs": self.graphs is not None,
+                "mixed_graphs": self.mixed_graphs is not None,
                 "prefix_caching": bm.enable_prefix_caching,
                 "chunked_prefill": sched.enable_chunked_prefill,
                 "quantization": _quantization_of(self.model),

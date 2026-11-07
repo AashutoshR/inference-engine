@@ -17,6 +17,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from engine.config import ModelConfig
+from engine.kernels import fused
 from engine.runtime.kv_cache import ContiguousKVCache
 from engine.runtime.paged_cache import PagedBatch
 
@@ -31,7 +32,12 @@ class RMSNorm(nn.Module):
         """x: [..., dim]. Normalize in float32, cast back to x.dtype, then scale by weight.
 
         Match HF exactly: weight * (x_fp32 * rsqrt(mean(x_fp32^2) + eps)).to(x.dtype)
+
+        On the GPU everything after the mean of squares is one fused kernel, bitwise
+        identical to the code below in every dtype.
         """
+        if fused.available(x):
+            return fused.rms_norm(x, self.weight, self.eps)
         xf = x.float()
         normed = xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + self.eps)
         return self.weight * normed.to(x.dtype)
@@ -141,11 +147,7 @@ class Attention(nn.Module):
            (combined with attention_mask for padded batches), then o_proj.
         """
         b, t, _ = x.shape
-        hd = self.cfg.head_dim
-        q = self.q_proj(x).view(b, t, -1, hd).transpose(1, 2)
-        k = self.k_proj(x).view(b, t, -1, hd).transpose(1, 2)
-        v = self.v_proj(x).view(b, t, -1, hd).transpose(1, 2)
-        q, k = apply_rotary(q, k, cos, sin)
+        q, k, v = self.project(x, cos, sin)
 
         if isinstance(cache, PagedBatch):
             return self.o_proj(self._paged(q[0], k[0], v[0], cache))[None]
@@ -165,6 +167,26 @@ class Attention(nn.Module):
             mask = build_attention_mask(t, start_pos, attention_mask, x.device)
             out = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
         return self.o_proj(out.transpose(1, 2).reshape(b, t, -1))
+
+    def project(
+        self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """x: [B, T, H] -> q [B, nh, T, hd], k, v [B, nkv, T, hd], RoPE applied to q, k."""
+        b, t, _ = x.shape
+        hd = self.cfg.head_dim
+        if fused.available(x):  # RoPE in place on the projections: one kernel each
+            q, k = self.q_proj(x), self.k_proj(x)
+            c, s = cos.reshape(b * t, hd), sin.reshape(b * t, hd)
+            fused.rope_(q.view(b * t, -1, hd), c, s)
+            fused.rope_(k.view(b * t, -1, hd), c, s)
+            q = q.view(b, t, -1, hd).transpose(1, 2)
+            k = k.view(b, t, -1, hd).transpose(1, 2)
+        else:
+            q = self.q_proj(x).view(b, t, -1, hd).transpose(1, 2)
+            k = self.k_proj(x).view(b, t, -1, hd).transpose(1, 2)
+            q, k = apply_rotary(q, k, cos, sin)
+        v = self.v_proj(x).view(b, t, -1, hd).transpose(1, 2)
+        return q, k, v
 
     def _paged(
         self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, batch: PagedBatch
@@ -202,13 +224,17 @@ class Attention(nn.Module):
         out = out.transpose(1, 2).flatten(2)  # [B, max_q, nh * hd]
         return out[batch.q_valid]  # back to flattened order: sequence by sequence
 
-    def _mixed(self, q: torch.Tensor, batch: PagedBatch) -> torch.Tensor:
+    def _mixed(
+        self, q: torch.Tensor, batch: PagedBatch, out: torch.Tensor | None = None
+    ) -> torch.Tensor:
         """Decode rows through the Triton kernel; prompt chunks through one FlashAttention
         varlen call (BF16/FP16) or one SDPA each (FP32). q: [nh, N, hd] -> [N, nh * hd].
-        Memory scales with the tokens actually present."""
+        Memory scales with the tokens actually present. ``out`` ([N, nh, hd]) receives the
+        result in place, so a CUDA graph can read it from a fixed address."""
         cache, layer = batch.cache, self.layer_idx
         qt = q.transpose(0, 1)  # [N, nh, hd]
-        out = torch.empty_like(qt)
+        if out is None:
+            out = torch.empty_like(qt)
         if batch.block_tables is not None:
             from engine.kernels.paged_attention import paged_decode_attention
 
@@ -250,6 +276,8 @@ class MLP(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """SwiGLU: down_proj(silu(gate_proj(x)) * up_proj(x))."""
+        if fused.available(x):
+            return self.down_proj(fused.silu_mul(self.gate_proj(x), self.up_proj(x)))
         return self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x))
 
 

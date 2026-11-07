@@ -5,9 +5,9 @@
   "python": "3.14.7",
   "dtype": "bfloat16",
   "prefill_tokens_per_s": {
-    "512": 3650,
-    "2000": 685
+    "512": 4561,
+    "2000": 4314
   },
-  "decode_tokens_per_s_batch1": 10.0,
+  "decode_tokens_per_s_batch1": 23.2,
   "peak_memory_gib": 6.12
 }

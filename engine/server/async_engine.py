@@ -3,6 +3,9 @@
 One thread owns the engine (and the GPU): it admits new requests, applies aborts, calls
 ``step()`` and hands each output to the right request's asyncio queue. HTTP handlers
 never touch the engine directly, so the engine needs no locks of its own.
+
+``engine serve`` uses ``ProcessEngine`` (engine/server/process_engine.py) instead, which
+keeps this request and stream handling but runs the engine in a process of its own.
 """
 
 from __future__ import annotations
@@ -41,12 +44,12 @@ class AsyncEngine:
         engine: LLMEngine,
         max_waiting: int = 256,
         request_timeout: float | None = 600.0,
-        on_step: Callable[[LLMEngine, list[RequestOutput], float], None] | None = None,
+        on_step: Callable[[dict, int], None] | None = None,
     ) -> None:
         self.engine = engine
         self.max_waiting = max_waiting
         self.request_timeout = request_timeout
-        self.on_step = on_step  # metrics hook: (engine, outputs, step seconds)
+        self.on_step = on_step  # metrics hook: (engine_stats(...), outputs this step)
         self._lock = threading.Lock()
         self._new: deque[tuple[str, list[int], SamplingParams]] = deque()
         self._aborts: deque[str] = deque()
@@ -76,6 +79,14 @@ class AsyncEngine:
             self._thread = None
 
     @property
+    def alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def capacity_tokens(self) -> int:
+        return self.engine.scheduler.capacity_tokens
+
+    @property
     def num_waiting(self) -> int:
         return len(self._new) + len(self.engine.scheduler.waiting)
 
@@ -100,8 +111,7 @@ class AsyncEngine:
             if request_id in self._streams:
                 raise ValueError(f"duplicate request id {request_id!r}")
             self._streams[request_id] = stream
-            self._new.append((request_id, list(prompt_ids), params))
-        self._wake.set()
+        self._submit(request_id, list(prompt_ids), params)
 
         deadline = None if self.request_timeout is None else time.monotonic() + self.request_timeout
         finished = False
@@ -124,6 +134,11 @@ class AsyncEngine:
                 self._streams.pop(request_id, None)
             if not finished:
                 self.abort(request_id)
+
+    def _submit(self, request_id: str, prompt_ids: list[int], params: SamplingParams) -> None:
+        with self._lock:
+            self._new.append((request_id, prompt_ids, params))
+        self._wake.set()
 
     def abort(self, request_id: str) -> None:
         with self._lock:
@@ -158,9 +173,8 @@ class AsyncEngine:
                 self._fail_all(exc)
                 continue
             if self.on_step is not None:
-                self.on_step(self.engine, outputs, time.perf_counter() - start)
-            for out in outputs:
-                self._deliver(out.request_id, out)
+                self.on_step(engine_stats(self.engine, time.perf_counter() - start), len(outputs))
+            self._deliver_step(outputs)
             self._refresh_snapshot(self.snapshot_interval)
 
     def _admit_and_abort(self) -> None:
@@ -180,9 +194,40 @@ class AsyncEngine:
             self.engine.abort(seq.request_id)
             self._deliver(seq.request_id, RuntimeError(f"engine error: {exc}"))
 
+    def _deliver_step(self, outputs: list[RequestOutput]) -> None:
+        """Hand a whole step's outputs over with one wake-up per event loop, not one per
+        token: each wake-up is a socket write, and the loop then runs once per step."""
+        by_loop: dict[asyncio.AbstractEventLoop, list[tuple[asyncio.Queue, object]]] = {}
+        with self._lock:
+            for out in outputs:
+                stream = self._streams.get(out.request_id)
+                if stream is not None:  # None: the caller already left; its abort is queued
+                    by_loop.setdefault(stream.loop, []).append((stream.queue, out))
+        for loop, items in by_loop.items():
+            loop.call_soon_threadsafe(_put_all, items)
+
     def _deliver(self, request_id: str, item: object) -> None:
         with self._lock:
             stream = self._streams.get(request_id)
         if stream is None:
             return  # the caller already left; its abort is queued
         stream.loop.call_soon_threadsafe(stream.queue.put_nowait, item)
+
+
+def _put_all(items: list[tuple[asyncio.Queue, object]]) -> None:
+    for queue, item in items:
+        queue.put_nowait(item)
+
+
+def engine_stats(engine: LLMEngine, seconds: float) -> dict:
+    """What the metrics need after a step, as plain data (it crosses a process boundary)."""
+    sched, bm = engine.scheduler, engine.block_manager
+    prompt = engine.prompt_tokens_total
+    return {
+        "seconds": seconds,
+        "running": len(sched.running),
+        "waiting": len(sched.waiting),
+        "kv_used": 1 - bm.num_free_blocks / bm.allocator.num_blocks,
+        "preemptions": sched.num_preemptions,
+        "prefix_hit": engine.cached_prompt_tokens_total / prompt if prompt else None,
+    }
