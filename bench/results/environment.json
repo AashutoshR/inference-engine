@@ -1,0 +1,9 @@
+{
+  "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "gpu_memory_gib": 8.0,
+  "torch": "2.15.0+cu132",
+  "cuda": "13.2",
+  "python": "3.14.7",
+  "os": "Windows-11-10.0.26300-SP0",
+  "date": "2026-11-07"
+}

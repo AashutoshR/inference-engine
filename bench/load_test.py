@@ -44,6 +44,7 @@ class Stats:
         self.ok = 0
         self.errors: dict[str, int] = {}
         self.mismatches: list[str] = []
+        self.pairs: dict[str, tuple[str, str]] = {}  # first two different answers per prompt
         self.answers: dict[str, str] = {}
 
     def error(self, kind: str) -> None:
@@ -99,6 +100,39 @@ async def one_request(client: httpx.AsyncClient, model: str, prompt: dict, args,
     seen = stats.answers.setdefault(prompt["id"], answer)
     if seen != answer:
         stats.mismatches.append(prompt["id"])
+        stats.pairs.setdefault(prompt["id"], (seen, answer))
+
+
+async def split_gap(client, model: str, prompt: dict, pair: tuple[str, str], args) -> dict:
+    """Where two greedy answers to one prompt part ways, how close was the model's call?
+
+    Asks once more (server idle, batch of one) with top_logprobs=2. This third answer
+    departs from at least one of the two earlier ones somewhere; at that token, the gap
+    between the top two choices says how close the call was. A gap near zero is a near-tie
+    that rounding can flip (batch shape and cached vs recomputed K/V change BF16 rounding);
+    a large gap would point at the engine computing something wrong. The token mapping is
+    trusted only when the tokens' text joins back into the answer exactly."""
+
+    def common(x: str, y: str) -> int:
+        return next((i for i, (p, q) in enumerate(zip(x, y, strict=False)) if p != q),
+                    min(len(x), len(y)))  # fmt: skip
+
+    body = {"model": model, "messages": prompt["messages"], "temperature": 0,
+            "max_tokens": args.max_tokens, "logprobs": True, "top_logprobs": 2}  # fmt: skip
+    choice = (await client.post("/v1/chat/completions", json=body)).json()["choices"][0]
+    text, content = choice["message"]["content"], choice["logprobs"]["content"]
+    a, b = pair
+    depart = min(common(text, a) if text != a else 10**9, common(text, b) if text != b else 10**9)
+    exact = "".join(t["token"] for t in content) == text
+    pos = 0
+    for i, tok in enumerate(content):
+        pos += len(tok["token"])
+        if pos > depart:
+            top = sorted((t["logprob"] for t in tok["top_logprobs"]), reverse=True)
+            gap = top[0] - top[1] if len(top) > 1 else None
+            return {"split_char": depart, "split_token": i, "exact_mapping": exact,
+                    "top2_gap": round(gap, 4) if gap is not None and exact else None}  # fmt: skip
+    return {"split_char": depart, "split_token": None, "exact_mapping": exact, "top2_gap": None}
 
 
 async def worker(client, model, prompts, args, stats, deadline, rng):
@@ -155,6 +189,9 @@ async def main_async(args) -> dict:
         elapsed = time.monotonic() - start
         await asyncio.sleep(1.0)  # let the engine finish its last step
         final = await server_gauges(client)
+        by_id = {p["id"]: p for p in prompts}
+        splits = {pid: await split_gap(client, model, by_id[pid], pair, args)
+                  for pid, pair in sorted(stats.pairs.items())}  # fmt: skip
 
     return {
         "model": model,
@@ -163,6 +200,10 @@ async def main_async(args) -> dict:
         "requests_ok": stats.ok,
         "errors": stats.errors,
         "mismatched_prompts": sorted(set(stats.mismatches)),
+        "mismatch_splits": splits,
+        "max_split_gap": max(
+            (v["top2_gap"] for v in splits.values() if v["top2_gap"] is not None), default=None
+        ),  # fmt: skip
         "output_tokens_per_s": round(stats.tokens / elapsed, 1),
         "requests_per_s": round(stats.ok / elapsed, 2),
         "ttft_s": {"p50": round(pct(stats.ttft, 0.5), 4), "p99": round(pct(stats.ttft, 0.99), 4)},
@@ -183,12 +224,14 @@ def main() -> None:
     p.add_argument("--request-timeout", type=float, default=600)
     p.add_argument("--report-every", type=float, default=15)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--name", default=None, help="results file stem (default load-<model>-c<N>)")
     args = p.parse_args()
 
     result = asyncio.run(main_async(args))
     print(json.dumps(result, indent=2))
     RESULTS.mkdir(exist_ok=True)
-    out = RESULTS / f"load-{result['model']}-c{args.concurrency}.json"
+    stem = args.name or f"load-{result['model']}-c{args.concurrency}"
+    out = RESULTS / f"{stem}.json"
     out.write_text(json.dumps(result, indent=2) + "\n")
 
     passed = (not result["errors"] and not result["mismatched_prompts"]

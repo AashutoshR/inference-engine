@@ -63,7 +63,7 @@ def main() -> None:
 
     p = argparse.ArgumentParser()
     p.add_argument("--model", required=True)
-    p.add_argument("--quant", choices=["none", "int4"], default="none")
+    p.add_argument("--quant", choices=["none", "int4", "fp8"], default="none")
     p.add_argument("--group-size", type=int, default=128)
     p.add_argument("--seq-len", type=int, default=2048)
     p.add_argument("--max-windows", type=int, default=0, help="0 = the whole test set")
@@ -87,7 +87,7 @@ def main() -> None:
 
     result = {
         "model": Path(args.model).name,
-        "quant": args.quant if args.quant == "none" else f"{args.quant}-g{args.group_size}",
+        "quant": f"int4-g{args.group_size}" if args.quant == "int4" else args.quant,
         "seq_len": args.seq_len,
         "windows": n_windows,
         "tokens_scored": count,

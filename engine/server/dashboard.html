@@ -186,8 +186,10 @@ function update(s) {
     const dt = s.time - prev.time;
     const tps = (s.totals.generated_tokens - prev.totals.generated_tokens) / dt;
     const sps = (s.totals.steps - prev.totals.steps) / dt;
-    rate.tps = rate.tps * 0.6 + tps * 0.4;
-    rate.sps = rate.sps * 0.6 + sps * 0.4;
+    // Smooth, but start from the first measurement instead of climbing up from zero.
+    rate.tps = rate.seeded ? rate.tps * 0.6 + tps * 0.4 : tps;
+    rate.sps = rate.seeded ? rate.sps * 0.6 + sps * 0.4 : sps;
+    rate.seeded = true;
   }
   prev = s; state = s;
   const c = s.config, t = s.totals;

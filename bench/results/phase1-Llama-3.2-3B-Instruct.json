@@ -1,0 +1,13 @@
+{
+  "model": "Llama-3.2-3B-Instruct",
+  "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "torch": "2.15.0+cu132",
+  "python": "3.14.7",
+  "dtype": "bfloat16",
+  "prefill_tokens_per_s": {
+    "512": 3650,
+    "2000": 685
+  },
+  "decode_tokens_per_s_batch1": 10.0,
+  "peak_memory_gib": 6.12
+}

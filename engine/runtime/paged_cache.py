@@ -64,6 +64,13 @@ class PagedBatch:
     use_kernel: bool = False
     block_tables: torch.Tensor | None = None  # [B, max_blocks] int32
     context_lens: torch.Tensor | None = None  # [B] int32
+    # Mixed steps with the Triton kernel (several sequences, some reading prompt tokens):
+    # decode rows go through the kernel, each prompt chunk gets its own unpadded SDPA.
+    # Padding everything to the longest chunk would cost B x chunk x context per layer.
+    mixed: bool = False
+    decode_rows: torch.Tensor | None = None  # [Bd] flat token index of each decode row
+    chunks: list[tuple[int, int, torch.Tensor, torch.Tensor | None]] | None = None
+    # (first flat token, length, context slots [ctx], mask [len, ctx] or None = causal)
 
     @classmethod
     def build(
@@ -81,6 +88,8 @@ class PagedBatch:
         b, max_q, max_ctx = len(query_lens), max(query_lens), max(context_lens)
         if use_kernel and max_q == 1:
             return cls._decode(cache, block_tables, context_lens, device)
+        if use_kernel and b > 1:
+            return cls._mixed(cache, block_tables, context_lens, query_lens, device)
 
         slot_mapping, kv_slots = [], []
         for table, ctx, q in zip(block_tables, context_lens, query_lens, strict=True):
@@ -138,4 +147,58 @@ class PagedBatch:
             use_kernel=True,
             block_tables=tables.to(device),
             context_lens=torch.tensor(context_lens, dtype=torch.int32, device=device),
+        )
+
+    @classmethod
+    def _mixed(
+        cls,
+        cache: PagedKVCache,
+        block_tables: list[list[int]],
+        context_lens: list[int],
+        query_lens: list[int],
+        device: str | torch.device,
+    ) -> PagedBatch:
+        bs = cache.block_size
+        slot_mapping, chunks, dec_rows, dec_tables, dec_ctx = [], [], [], [], []
+        start = 0
+        for table, ctx, q in zip(block_tables, context_lens, query_lens, strict=True):
+            slots = [table[p // bs] * bs + p % bs for p in range(ctx)]
+            slot_mapping.extend(slots[ctx - q :])
+            if q == 1:
+                dec_rows.append(start)
+                dec_tables.append(table)
+                dec_ctx.append(ctx)
+            else:
+                mask = None  # whole prompt in one chunk: plain causal attention
+                if ctx > q:  # later chunk, or prefix hit: queries sit at ctx - q + i
+                    i = torch.arange(q, device=device)[:, None]
+                    mask = torch.arange(ctx, device=device)[None, :] <= (ctx - q) + i
+                kv = torch.tensor(slots, device=device, dtype=torch.long)
+                chunks.append((start, q, kv, mask))
+            start += q
+        tables = None
+        if dec_tables:
+            width = max(len(t) for t in dec_tables)
+            tables = torch.tensor(
+                [t + [0] * (width - len(t)) for t in dec_tables], dtype=torch.int32
+            ).to(device)
+        qlens = torch.tensor(query_lens, device=device)
+        starts = torch.tensor([0, *query_lens], device=device).cumsum(0)[:-1]
+        empty = torch.zeros(0, dtype=torch.long, device=device)
+        return cls(
+            cache=cache,
+            slot_mapping=torch.tensor(slot_mapping, device=device, dtype=torch.long),
+            kv_slots=empty,  # unused on the mixed path
+            q_index=empty,
+            q_valid=torch.zeros(0, dtype=torch.bool, device=device),
+            attn_mask=None,
+            last_index=starts + qlens - 1,
+            use_kernel=False,
+            block_tables=tables,
+            context_lens=(
+                torch.tensor(dec_ctx, dtype=torch.int32, device=device) if dec_ctx else None
+            ),  # fmt: skip
+            mixed=True,
+            decode_rows=torch.tensor(dec_rows, device=device, dtype=torch.long),
+            chunks=chunks,
         )

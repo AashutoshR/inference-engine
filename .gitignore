@@ -19,3 +19,7 @@ models/
 
 # Cached Hugging Face golden references (machine-specific)
 .cache/
+
+# Benchmark run noise (the JSON results and run_all.log are kept)
+bench/results/server.log
+bench/results/*.console.txt

@@ -1,0 +1,10 @@
+{
+  "model": "Llama-3.2-3B-Instruct",
+  "quant": "none",
+  "seq_len": 2048,
+  "windows": 141,
+  "tokens_scored": 288627,
+  "perplexity": 11.0505,
+  "peak_memory_gib": 6.31,
+  "seconds": 186.9
+}

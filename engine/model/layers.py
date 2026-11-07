@@ -188,6 +188,8 @@ class Attention(nn.Module):
                 batch.cache.block_size,
             )
             return out.flatten(1)
+        if batch.mixed:
+            return self._mixed(q, batch)
         k_ctx, v_ctx = batch.cache.gather(self.layer_idx, batch.kv_slots)  # [B, ctx, nkv, hd]
         k_ctx, v_ctx = k_ctx.transpose(1, 2).to(q.dtype), v_ctx.transpose(1, 2).to(q.dtype)
         groups = self.cfg.num_kv_groups
@@ -199,6 +201,34 @@ class Attention(nn.Module):
         out = F.scaled_dot_product_attention(q_pad, k_ctx, v_ctx, attn_mask=batch.attn_mask)
         out = out.transpose(1, 2).flatten(2)  # [B, max_q, nh * hd]
         return out[batch.q_valid]  # back to flattened order: sequence by sequence
+
+    def _mixed(self, q: torch.Tensor, batch: PagedBatch) -> torch.Tensor:
+        """Decode rows through the Triton kernel, each prompt chunk through its own SDPA.
+        q: [nh, N, hd] -> [N, nh * hd]. Memory scales with the tokens actually present."""
+        cache, layer = batch.cache, self.layer_idx
+        qt = q.transpose(0, 1)  # [N, nh, hd]
+        out = torch.empty_like(qt)
+        if batch.block_tables is not None:
+            from engine.kernels.paged_attention import paged_decode_attention
+
+            rows = batch.decode_rows
+            out[rows] = paged_decode_attention(
+                qt[rows].contiguous(), cache.k[layer], cache.v[layer],
+                batch.block_tables, batch.context_lens, cache.block_size,
+            ).to(out.dtype)  # fmt: skip
+        groups = self.cfg.num_kv_groups
+        for start, n, slots, mask in batch.chunks:
+            k_ctx = cache.k[layer][slots].transpose(0, 1).to(q.dtype)  # [nkv, ctx, hd]
+            v_ctx = cache.v[layer][slots].transpose(0, 1).to(q.dtype)
+            if groups > 1:
+                k_ctx = k_ctx.repeat_interleave(groups, dim=0)
+                v_ctx = v_ctx.repeat_interleave(groups, dim=0)
+            o = F.scaled_dot_product_attention(
+                q[None, :, start : start + n], k_ctx[None], v_ctx[None],
+                attn_mask=mask, is_causal=mask is None,
+            )  # fmt: skip
+            out[start : start + n] = o[0].transpose(0, 1)
+        return out.flatten(1)
 
 
 class MLP(nn.Module):

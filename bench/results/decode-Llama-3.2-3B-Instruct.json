@@ -1,0 +1,54 @@
+[
+  {
+    "mode": "static",
+    "quant": "none",
+    "spec": null,
+    "decode_tokens_per_s": 9.8,
+    "itl_ms": 102.34,
+    "peak_memory_gib": 6.04
+  },
+  {
+    "mode": "graphs",
+    "quant": "none",
+    "spec": null,
+    "decode_tokens_per_s": 27.8,
+    "itl_ms": 35.98,
+    "peak_memory_gib": 6.2
+  },
+  {
+    "mode": "graphs",
+    "quant": "int4",
+    "spec": null,
+    "decode_tokens_per_s": 78.2,
+    "itl_ms": 12.79,
+    "peak_memory_gib": 2.44
+  },
+  {
+    "mode": "graphs",
+    "quant": "fp8",
+    "spec": null,
+    "decode_tokens_per_s": 46.2,
+    "itl_ms": 21.64,
+    "peak_memory_gib": 3.57
+  },
+  {
+    "mode": "spec",
+    "quant": "none",
+    "spec": "ngram",
+    "decode_tokens_per_s": 9.0,
+    "itl_ms": 110.6,
+    "peak_memory_gib": 6.12,
+    "acceptance_rate": 0.135,
+    "tokens_per_target_pass": 1.22
+  },
+  {
+    "mode": "spec",
+    "quant": "int4",
+    "spec": "models/Llama-3.2-1B-Instruct",
+    "decode_tokens_per_s": 10.2,
+    "itl_ms": 98.39,
+    "peak_memory_gib": 3.31,
+    "acceptance_rate": 0.562,
+    "tokens_per_target_pass": 3.24
+  }
+]

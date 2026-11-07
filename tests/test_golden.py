@@ -75,6 +75,38 @@ def _free_gpu() -> None:
         torch.cuda.empty_cache()
 
 
+OUTCOMES: list[dict] = []  # one row per prompt, written to bench/results at the end
+
+
+@pytest.fixture(scope="module", autouse=True)
+def report():
+    """Write every prompt's outcome to bench/results/gate1-<model>-<dtype>.json."""
+    import time
+
+    start = time.time()
+    yield
+    if not OUTCOMES:
+        return
+    out = ROOT / "bench" / "results" / f"gate1-{Path(MODEL_DIR).resolve().name}-{DTYPE_NAME}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    exact = sum(o["result"] == "exact" for o in OUTCOMES)
+    ties = sum(o["result"] == "near-tie" for o in OUTCOMES)
+    summary = {
+        "model": Path(MODEL_DIR).resolve().name,
+        "dtype": DTYPE_NAME,
+        "device": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
+        "rule": "every token identical" if EXACT else "mismatches must be near-ties (gap < 1e-2)",
+        "prompts": len(OUTCOMES),
+        "exact": exact,
+        "near_ties": ties,
+        "failed": len(OUTCOMES) - exact - ties,
+        "tokens_compared": sum(o["tokens"] for o in OUTCOMES),
+        "seconds": round(time.time() - start, 1),
+        "outcomes": OUTCOMES,
+    }
+    out.write_text(json.dumps(summary, indent=1) + chr(10), encoding="utf-8")
+
+
 @pytest.fixture(scope="module")
 def tokenizer():
     return transformers.AutoTokenizer.from_pretrained(MODEL_DIR)
@@ -150,9 +182,14 @@ def test_greedy_matches_hf(reference, ours, tokenizer, stop_ids, prompt):
     got = [out.token_id for out in generate(ours, tokenizer, [ids], params, stop_ids)]
 
     pos = first_divergence(got, ref["tokens"])
+    row = {"id": prompt["id"], "prompt_tokens": len(ids), "tokens": len(ref["tokens"])}
     if pos is None:
+        OUTCOMES.append({**row, "result": "exact"})
         return
     gap = ref["gaps"][pos] if pos < len(ref["gaps"]) else float("nan")
+    ok = not EXACT and is_near_tie(gap)
+    OUTCOMES.append({**row, "result": "near-tie" if ok else "failed", "diverged_at": pos,
+                     "gap": gap})  # fmt: skip
     context = tokenizer.decode(ref["tokens"][max(0, pos - 10) : pos])
     msg = (
         f"{prompt['id']}: diverged at token {pos} of {len(ref['tokens'])}, "

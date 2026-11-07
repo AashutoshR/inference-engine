@@ -1,0 +1,363 @@
+{
+  "model": "Llama-3.2-1B-Instruct",
+  "concurrency": 16,
+  "duration_s": 62.2,
+  "requests_ok": 342,
+  "errors": {},
+  "mismatched_prompts": [
+    "chat-02",
+    "chat-03",
+    "chat-04",
+    "chat-09",
+    "chat-13",
+    "chat-18",
+    "chat-22",
+    "chat-28",
+    "chat-30",
+    "chat-32",
+    "code-01",
+    "code-04",
+    "code-08",
+    "code-14",
+    "code-20",
+    "code-22",
+    "code-24",
+    "emoji-09",
+    "emoji-13",
+    "emoji-14",
+    "lang-09",
+    "lang-13",
+    "lang-19",
+    "long-00",
+    "long-04",
+    "long-05",
+    "long-18",
+    "long-20",
+    "long-37",
+    "long-38",
+    "long-44",
+    "long-45",
+    "long-49",
+    "math-03",
+    "math-14",
+    "multi-01",
+    "multi-04",
+    "multi-05",
+    "multi-06",
+    "multi-09",
+    "multi-10",
+    "multi-13",
+    "multi-turn",
+    "non-english",
+    "system-01",
+    "system-03",
+    "system-05",
+    "system-14"
+  ],
+  "mismatch_splits": {
+    "chat-02": {
+      "split_char": 609,
+      "split_token": 126,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "chat-03": {
+      "split_char": 420,
+      "split_token": 93,
+      "exact_mapping": true,
+      "top2_gap": 0.0
+    },
+    "chat-04": {
+      "split_char": 88,
+      "split_token": 16,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "chat-09": {
+      "split_char": 51,
+      "split_token": 11,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "chat-13": {
+      "split_char": 520,
+      "split_token": 120,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "chat-18": {
+      "split_char": 391,
+      "split_token": 77,
+      "exact_mapping": true,
+      "top2_gap": 0.25
+    },
+    "chat-22": {
+      "split_char": 41,
+      "split_token": 10,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "chat-28": {
+      "split_char": 75,
+      "split_token": 16,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "chat-30": {
+      "split_char": 184,
+      "split_token": 46,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "chat-32": {
+      "split_char": 418,
+      "split_token": 92,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "code-01": {
+      "split_char": 200,
+      "split_token": 37,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "code-04": {
+      "split_char": 197,
+      "split_token": 45,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "code-08": {
+      "split_char": 131,
+      "split_token": 35,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "code-14": {
+      "split_char": 219,
+      "split_token": 40,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "code-20": {
+      "split_char": 382,
+      "split_token": 88,
+      "exact_mapping": true,
+      "top2_gap": 2.25
+    },
+    "code-22": {
+      "split_char": 211,
+      "split_token": 37,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "code-24": {
+      "split_char": 59,
+      "split_token": 14,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "emoji-09": {
+      "split_char": 61,
+      "split_token": 19,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "emoji-13": {
+      "split_char": 353,
+      "split_token": 117,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "emoji-14": {
+      "split_char": 145,
+      "split_token": 36,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "lang-09": {
+      "split_char": 19,
+      "split_token": 11,
+      "exact_mapping": true,
+      "top2_gap": 0.0625
+    },
+    "lang-13": {
+      "split_char": 25,
+      "split_token": 13,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "lang-19": {
+      "split_char": 304,
+      "split_token": 72,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "long-00": {
+      "split_char": 48,
+      "split_token": 10,
+      "exact_mapping": true,
+      "top2_gap": 0.0
+    },
+    "long-04": {
+      "split_char": 73,
+      "split_token": 20,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "long-05": {
+      "split_char": 180,
+      "split_token": 40,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "long-18": {
+      "split_char": 203,
+      "split_token": 38,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "long-20": {
+      "split_char": 117,
+      "split_token": 26,
+      "exact_mapping": true,
+      "top2_gap": 0.0
+    },
+    "long-37": {
+      "split_char": 280,
+      "split_token": 104,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "long-38": {
+      "split_char": 165,
+      "split_token": 36,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "long-44": {
+      "split_char": 34,
+      "split_token": 16,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "long-45": {
+      "split_char": 525,
+      "split_token": 119,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "long-49": {
+      "split_char": 76,
+      "split_token": 36,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "math-03": {
+      "split_char": 255,
+      "split_token": 80,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "math-14": {
+      "split_char": 3,
+      "split_token": 1,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "multi-01": {
+      "split_char": 60,
+      "split_token": 12,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "multi-04": {
+      "split_char": 325,
+      "split_token": 88,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "multi-05": {
+      "split_char": 97,
+      "split_token": 31,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "multi-06": {
+      "split_char": 80,
+      "split_token": 19,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "multi-09": {
+      "split_char": 101,
+      "split_token": 20,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "multi-10": {
+      "split_char": 180,
+      "split_token": 38,
+      "exact_mapping": true,
+      "top2_gap": 0.0
+    },
+    "multi-13": {
+      "split_char": 194,
+      "split_token": 38,
+      "exact_mapping": true,
+      "top2_gap": 0.125
+    },
+    "multi-turn": {
+      "split_char": 142,
+      "split_token": 34,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "non-english": {
+      "split_char": 72,
+      "split_token": 20,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "system-01": {
+      "split_char": 234,
+      "split_token": 74,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "system-03": {
+      "split_char": 140,
+      "split_token": 23,
+      "exact_mapping": false,
+      "top2_gap": null
+    },
+    "system-05": {
+      "split_char": 130,
+      "split_token": 39,
+      "exact_mapping": true,
+      "top2_gap": 0.0
+    },
+    "system-14": {
+      "split_char": 436,
+      "split_token": 99,
+      "exact_mapping": true,
+      "top2_gap": 0.0
+    }
+  },
+  "max_split_gap": 2.25,
+  "output_tokens_per_s": 534.8,
+  "requests_per_s": 5.5,
+  "ttft_s": {
+    "p50": 0.1241,
+    "p99": 0.4256
+  },
+  "itl_s": {
+    "p50": 0.0201,
+    "p99": 0.1028
+  },
+  "latency_s": {
+    "mean": 2.863
+  },
+  "final_kv_used": 0.0,
+  "preemptions": 0.0
+}

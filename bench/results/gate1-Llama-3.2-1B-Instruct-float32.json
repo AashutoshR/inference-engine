@@ -1,0 +1,1214 @@
+{
+ "model": "Llama-3.2-1B-Instruct",
+ "dtype": "float32",
+ "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+ "rule": "every token identical",
+ "prompts": 200,
+ "exact": 200,
+ "near_ties": 0,
+ "failed": 0,
+ "tokens_compared": 18894,
+ "seconds": 1509.3,
+ "outcomes": [
+  {
+   "id": "chat-short",
+   "prompt_tokens": 42,
+   "tokens": 8,
+   "result": "exact"
+  },
+  {
+   "id": "code",
+   "prompt_tokens": 48,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math",
+   "prompt_tokens": 61,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "non-english",
+   "prompt_tokens": 46,
+   "tokens": 70,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-utf8",
+   "prompt_tokens": 50,
+   "tokens": 26,
+   "result": "exact"
+  },
+  {
+   "id": "multi-turn",
+   "prompt_tokens": 62,
+   "tokens": 35,
+   "result": "exact"
+  },
+  {
+   "id": "chat-01",
+   "prompt_tokens": 37,
+   "tokens": 8,
+   "result": "exact"
+  },
+  {
+   "id": "chat-02",
+   "prompt_tokens": 41,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-03",
+   "prompt_tokens": 43,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-04",
+   "prompt_tokens": 44,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-05",
+   "prompt_tokens": 43,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-06",
+   "prompt_tokens": 44,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-07",
+   "prompt_tokens": 44,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-08",
+   "prompt_tokens": 45,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-09",
+   "prompt_tokens": 44,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-10",
+   "prompt_tokens": 43,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-11",
+   "prompt_tokens": 43,
+   "tokens": 17,
+   "result": "exact"
+  },
+  {
+   "id": "chat-12",
+   "prompt_tokens": 46,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-13",
+   "prompt_tokens": 44,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-14",
+   "prompt_tokens": 43,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-15",
+   "prompt_tokens": 41,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-16",
+   "prompt_tokens": 44,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-17",
+   "prompt_tokens": 46,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-18",
+   "prompt_tokens": 44,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-19",
+   "prompt_tokens": 44,
+   "tokens": 26,
+   "result": "exact"
+  },
+  {
+   "id": "chat-20",
+   "prompt_tokens": 42,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-21",
+   "prompt_tokens": 46,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-22",
+   "prompt_tokens": 46,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-23",
+   "prompt_tokens": 45,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-24",
+   "prompt_tokens": 47,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-25",
+   "prompt_tokens": 45,
+   "tokens": 118,
+   "result": "exact"
+  },
+  {
+   "id": "chat-26",
+   "prompt_tokens": 42,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-27",
+   "prompt_tokens": 44,
+   "tokens": 36,
+   "result": "exact"
+  },
+  {
+   "id": "chat-28",
+   "prompt_tokens": 41,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-29",
+   "prompt_tokens": 47,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-30",
+   "prompt_tokens": 45,
+   "tokens": 69,
+   "result": "exact"
+  },
+  {
+   "id": "chat-31",
+   "prompt_tokens": 43,
+   "tokens": 50,
+   "result": "exact"
+  },
+  {
+   "id": "chat-32",
+   "prompt_tokens": 47,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-33",
+   "prompt_tokens": 40,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "chat-34",
+   "prompt_tokens": 46,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-01",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-02",
+   "prompt_tokens": 62,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-03",
+   "prompt_tokens": 51,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-04",
+   "prompt_tokens": 48,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-05",
+   "prompt_tokens": 45,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-06",
+   "prompt_tokens": 54,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-07",
+   "prompt_tokens": 58,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-08",
+   "prompt_tokens": 47,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-09",
+   "prompt_tokens": 44,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-10",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-11",
+   "prompt_tokens": 51,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-12",
+   "prompt_tokens": 53,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-13",
+   "prompt_tokens": 50,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-14",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-15",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-16",
+   "prompt_tokens": 66,
+   "tokens": 88,
+   "result": "exact"
+  },
+  {
+   "id": "code-17",
+   "prompt_tokens": 53,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-18",
+   "prompt_tokens": 46,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-19",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-20",
+   "prompt_tokens": 65,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-21",
+   "prompt_tokens": 47,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-22",
+   "prompt_tokens": 46,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-23",
+   "prompt_tokens": 46,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "code-24",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-01",
+   "prompt_tokens": 43,
+   "tokens": 51,
+   "result": "exact"
+  },
+  {
+   "id": "math-02",
+   "prompt_tokens": 50,
+   "tokens": 90,
+   "result": "exact"
+  },
+  {
+   "id": "math-03",
+   "prompt_tokens": 57,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-04",
+   "prompt_tokens": 56,
+   "tokens": 91,
+   "result": "exact"
+  },
+  {
+   "id": "math-05",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-06",
+   "prompt_tokens": 44,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-07",
+   "prompt_tokens": 57,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-08",
+   "prompt_tokens": 43,
+   "tokens": 98,
+   "result": "exact"
+  },
+  {
+   "id": "math-09",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-10",
+   "prompt_tokens": 56,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-11",
+   "prompt_tokens": 58,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-12",
+   "prompt_tokens": 50,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-13",
+   "prompt_tokens": 47,
+   "tokens": 111,
+   "result": "exact"
+  },
+  {
+   "id": "math-14",
+   "prompt_tokens": 54,
+   "tokens": 85,
+   "result": "exact"
+  },
+  {
+   "id": "math-15",
+   "prompt_tokens": 44,
+   "tokens": 41,
+   "result": "exact"
+  },
+  {
+   "id": "math-16",
+   "prompt_tokens": 54,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-17",
+   "prompt_tokens": 48,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "math-18",
+   "prompt_tokens": 45,
+   "tokens": 53,
+   "result": "exact"
+  },
+  {
+   "id": "math-19",
+   "prompt_tokens": 59,
+   "tokens": 93,
+   "result": "exact"
+  },
+  {
+   "id": "lang-01",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "lang-02",
+   "prompt_tokens": 54,
+   "tokens": 79,
+   "result": "exact"
+  },
+  {
+   "id": "lang-03",
+   "prompt_tokens": 45,
+   "tokens": 11,
+   "result": "exact"
+  },
+  {
+   "id": "lang-04",
+   "prompt_tokens": 44,
+   "tokens": 47,
+   "result": "exact"
+  },
+  {
+   "id": "lang-05",
+   "prompt_tokens": 44,
+   "tokens": 10,
+   "result": "exact"
+  },
+  {
+   "id": "lang-06",
+   "prompt_tokens": 50,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "lang-07",
+   "prompt_tokens": 47,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "lang-08",
+   "prompt_tokens": 44,
+   "tokens": 64,
+   "result": "exact"
+  },
+  {
+   "id": "lang-09",
+   "prompt_tokens": 48,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "lang-10",
+   "prompt_tokens": 42,
+   "tokens": 9,
+   "result": "exact"
+  },
+  {
+   "id": "lang-11",
+   "prompt_tokens": 60,
+   "tokens": 83,
+   "result": "exact"
+  },
+  {
+   "id": "lang-12",
+   "prompt_tokens": 47,
+   "tokens": 45,
+   "result": "exact"
+  },
+  {
+   "id": "lang-13",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "lang-14",
+   "prompt_tokens": 45,
+   "tokens": 55,
+   "result": "exact"
+  },
+  {
+   "id": "lang-15",
+   "prompt_tokens": 48,
+   "tokens": 16,
+   "result": "exact"
+  },
+  {
+   "id": "lang-16",
+   "prompt_tokens": 56,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "lang-17",
+   "prompt_tokens": 48,
+   "tokens": 92,
+   "result": "exact"
+  },
+  {
+   "id": "lang-18",
+   "prompt_tokens": 48,
+   "tokens": 32,
+   "result": "exact"
+  },
+  {
+   "id": "lang-19",
+   "prompt_tokens": 49,
+   "tokens": 73,
+   "result": "exact"
+  },
+  {
+   "id": "lang-20",
+   "prompt_tokens": 46,
+   "tokens": 13,
+   "result": "exact"
+  },
+  {
+   "id": "lang-21",
+   "prompt_tokens": 49,
+   "tokens": 8,
+   "result": "exact"
+  },
+  {
+   "id": "lang-22",
+   "prompt_tokens": 50,
+   "tokens": 12,
+   "result": "exact"
+  },
+  {
+   "id": "lang-23",
+   "prompt_tokens": 57,
+   "tokens": 80,
+   "result": "exact"
+  },
+  {
+   "id": "lang-24",
+   "prompt_tokens": 48,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-01",
+   "prompt_tokens": 55,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-02",
+   "prompt_tokens": 50,
+   "tokens": 32,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-03",
+   "prompt_tokens": 52,
+   "tokens": 49,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-04",
+   "prompt_tokens": 49,
+   "tokens": 7,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-05",
+   "prompt_tokens": 59,
+   "tokens": 40,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-06",
+   "prompt_tokens": 58,
+   "tokens": 56,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-07",
+   "prompt_tokens": 48,
+   "tokens": 44,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-08",
+   "prompt_tokens": 47,
+   "tokens": 31,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-09",
+   "prompt_tokens": 59,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-10",
+   "prompt_tokens": 48,
+   "tokens": 114,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-11",
+   "prompt_tokens": 52,
+   "tokens": 16,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-12",
+   "prompt_tokens": 52,
+   "tokens": 74,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-13",
+   "prompt_tokens": 58,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "emoji-14",
+   "prompt_tokens": 45,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "multi-01",
+   "prompt_tokens": 74,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "multi-02",
+   "prompt_tokens": 72,
+   "tokens": 3,
+   "result": "exact"
+  },
+  {
+   "id": "multi-03",
+   "prompt_tokens": 67,
+   "tokens": 64,
+   "result": "exact"
+  },
+  {
+   "id": "multi-04",
+   "prompt_tokens": 75,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "multi-05",
+   "prompt_tokens": 75,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "multi-06",
+   "prompt_tokens": 72,
+   "tokens": 23,
+   "result": "exact"
+  },
+  {
+   "id": "multi-07",
+   "prompt_tokens": 61,
+   "tokens": 6,
+   "result": "exact"
+  },
+  {
+   "id": "multi-08",
+   "prompt_tokens": 75,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "multi-09",
+   "prompt_tokens": 72,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "multi-10",
+   "prompt_tokens": 67,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "multi-11",
+   "prompt_tokens": 73,
+   "tokens": 15,
+   "result": "exact"
+  },
+  {
+   "id": "multi-12",
+   "prompt_tokens": 70,
+   "tokens": 31,
+   "result": "exact"
+  },
+  {
+   "id": "multi-13",
+   "prompt_tokens": 73,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "multi-14",
+   "prompt_tokens": 83,
+   "tokens": 64,
+   "result": "exact"
+  },
+  {
+   "id": "system-01",
+   "prompt_tokens": 52,
+   "tokens": 117,
+   "result": "exact"
+  },
+  {
+   "id": "system-02",
+   "prompt_tokens": 46,
+   "tokens": 3,
+   "result": "exact"
+  },
+  {
+   "id": "system-03",
+   "prompt_tokens": 54,
+   "tokens": 67,
+   "result": "exact"
+  },
+  {
+   "id": "system-04",
+   "prompt_tokens": 57,
+   "tokens": 15,
+   "result": "exact"
+  },
+  {
+   "id": "system-05",
+   "prompt_tokens": 69,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "system-06",
+   "prompt_tokens": 52,
+   "tokens": 19,
+   "result": "exact"
+  },
+  {
+   "id": "system-07",
+   "prompt_tokens": 43,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "system-08",
+   "prompt_tokens": 58,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "system-09",
+   "prompt_tokens": 51,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "system-10",
+   "prompt_tokens": 54,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "system-11",
+   "prompt_tokens": 50,
+   "tokens": 15,
+   "result": "exact"
+  },
+  {
+   "id": "system-12",
+   "prompt_tokens": 52,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "system-13",
+   "prompt_tokens": 49,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "system-14",
+   "prompt_tokens": 54,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "system-15",
+   "prompt_tokens": 67,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-00",
+   "prompt_tokens": 302,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-01",
+   "prompt_tokens": 368,
+   "tokens": 27,
+   "result": "exact"
+  },
+  {
+   "id": "long-02",
+   "prompt_tokens": 355,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-03",
+   "prompt_tokens": 263,
+   "tokens": 93,
+   "result": "exact"
+  },
+  {
+   "id": "long-04",
+   "prompt_tokens": 280,
+   "tokens": 40,
+   "result": "exact"
+  },
+  {
+   "id": "long-05",
+   "prompt_tokens": 461,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-06",
+   "prompt_tokens": 517,
+   "tokens": 19,
+   "result": "exact"
+  },
+  {
+   "id": "long-07",
+   "prompt_tokens": 520,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-08",
+   "prompt_tokens": 402,
+   "tokens": 119,
+   "result": "exact"
+  },
+  {
+   "id": "long-09",
+   "prompt_tokens": 415,
+   "tokens": 72,
+   "result": "exact"
+  },
+  {
+   "id": "long-10",
+   "prompt_tokens": 651,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-11",
+   "prompt_tokens": 714,
+   "tokens": 25,
+   "result": "exact"
+  },
+  {
+   "id": "long-12",
+   "prompt_tokens": 681,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-13",
+   "prompt_tokens": 548,
+   "tokens": 112,
+   "result": "exact"
+  },
+  {
+   "id": "long-14",
+   "prompt_tokens": 595,
+   "tokens": 56,
+   "result": "exact"
+  },
+  {
+   "id": "long-15",
+   "prompt_tokens": 851,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-16",
+   "prompt_tokens": 884,
+   "tokens": 32,
+   "result": "exact"
+  },
+  {
+   "id": "long-17",
+   "prompt_tokens": 844,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-18",
+   "prompt_tokens": 705,
+   "tokens": 91,
+   "result": "exact"
+  },
+  {
+   "id": "long-19",
+   "prompt_tokens": 775,
+   "tokens": 78,
+   "result": "exact"
+  },
+  {
+   "id": "long-20",
+   "prompt_tokens": 1036,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-21",
+   "prompt_tokens": 1068,
+   "tokens": 32,
+   "result": "exact"
+  },
+  {
+   "id": "long-22",
+   "prompt_tokens": 1015,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-23",
+   "prompt_tokens": 834,
+   "tokens": 109,
+   "result": "exact"
+  },
+  {
+   "id": "long-24",
+   "prompt_tokens": 955,
+   "tokens": 54,
+   "result": "exact"
+  },
+  {
+   "id": "long-25",
+   "prompt_tokens": 1189,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-26",
+   "prompt_tokens": 1231,
+   "tokens": 32,
+   "result": "exact"
+  },
+  {
+   "id": "long-27",
+   "prompt_tokens": 1167,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-28",
+   "prompt_tokens": 983,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-29",
+   "prompt_tokens": 1135,
+   "tokens": 62,
+   "result": "exact"
+  },
+  {
+   "id": "long-30",
+   "prompt_tokens": 1389,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-31",
+   "prompt_tokens": 1415,
+   "tokens": 24,
+   "result": "exact"
+  },
+  {
+   "id": "long-32",
+   "prompt_tokens": 1337,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-33",
+   "prompt_tokens": 1146,
+   "tokens": 115,
+   "result": "exact"
+  },
+  {
+   "id": "long-34",
+   "prompt_tokens": 1315,
+   "tokens": 74,
+   "result": "exact"
+  },
+  {
+   "id": "long-35",
+   "prompt_tokens": 1564,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-36",
+   "prompt_tokens": 1567,
+   "tokens": 28,
+   "result": "exact"
+  },
+  {
+   "id": "long-37",
+   "prompt_tokens": 1494,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-38",
+   "prompt_tokens": 1270,
+   "tokens": 115,
+   "result": "exact"
+  },
+  {
+   "id": "long-39",
+   "prompt_tokens": 1495,
+   "tokens": 119,
+   "result": "exact"
+  },
+  {
+   "id": "long-40",
+   "prompt_tokens": 1757,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-41",
+   "prompt_tokens": 1765,
+   "tokens": 26,
+   "result": "exact"
+  },
+  {
+   "id": "long-42",
+   "prompt_tokens": 1656,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-43",
+   "prompt_tokens": 1417,
+   "tokens": 80,
+   "result": "exact"
+  },
+  {
+   "id": "long-44",
+   "prompt_tokens": 1675,
+   "tokens": 68,
+   "result": "exact"
+  },
+  {
+   "id": "long-45",
+   "prompt_tokens": 1949,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-46",
+   "prompt_tokens": 1949,
+   "tokens": 26,
+   "result": "exact"
+  },
+  {
+   "id": "long-47",
+   "prompt_tokens": 1834,
+   "tokens": 128,
+   "result": "exact"
+  },
+  {
+   "id": "long-48",
+   "prompt_tokens": 1608,
+   "tokens": 102,
+   "result": "exact"
+  },
+  {
+   "id": "long-49",
+   "prompt_tokens": 1855,
+   "tokens": 86,
+   "result": "exact"
+  }
+ ]
+}

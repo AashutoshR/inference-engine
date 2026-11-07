@@ -1,0 +1,240 @@
+[21:57:08] run_all: decode prefill ppl load tests gate1 soak
+[21:57:08] START decode Llama-3.2-1B-Instruct static none
+[21:58:21] DONE  decode Llama-3.2-1B-Instruct static none (73s)
+    {"mode": "static", "quant": "none", "spec": null, "decode_tokens_per_s": 16.6, "itl_ms": 60.18, "peak_memory_gib": 2.33}
+[21:58:21] START decode Llama-3.2-1B-Instruct eager none
+[22:00:08] DONE  decode Llama-3.2-1B-Instruct eager none (106s)
+    {"mode": "eager", "quant": "none", "spec": null, "decode_tokens_per_s": 9.9, "itl_ms": 100.7, "peak_memory_gib": 2.37}
+[22:00:08] START decode Llama-3.2-1B-Instruct triton none
+[22:01:19] DONE  decode Llama-3.2-1B-Instruct triton none (72s)
+    {"mode": "triton", "quant": "none", "spec": null, "decode_tokens_per_s": 17.5, "itl_ms": 57.24, "peak_memory_gib": 2.37}
+[22:01:19] START decode Llama-3.2-1B-Instruct graphs none
+[22:01:48] DONE  decode Llama-3.2-1B-Instruct graphs none (28s)
+    {"mode": "graphs", "quant": "none", "spec": null, "decode_tokens_per_s": 81.5, "itl_ms": 12.27, "peak_memory_gib": 2.38}
+[22:01:48] START decode Llama-3.2-1B-Instruct graphs int4
+[22:02:12] DONE  decode Llama-3.2-1B-Instruct graphs int4 (24s)
+    {"mode": "graphs", "quant": "int4", "spec": null, "decode_tokens_per_s": 158.8, "itl_ms": 6.3, "peak_memory_gib": 1.18}
+[22:02:12] START decode Llama-3.2-1B-Instruct graphs fp8
+[22:02:40] DONE  decode Llama-3.2-1B-Instruct graphs fp8 (28s)
+    {"mode": "graphs", "quant": "fp8", "spec": null, "decode_tokens_per_s": 99.5, "itl_ms": 10.06, "peak_memory_gib": 1.53}
+[22:02:40] START decode Llama-3.2-3B-Instruct static none
+[22:04:31] DONE  decode Llama-3.2-3B-Instruct static none (111s)
+    {"mode": "static", "quant": "none", "spec": null, "decode_tokens_per_s": 9.8, "itl_ms": 102.34, "peak_memory_gib": 6.04}
+[22:04:31] START decode Llama-3.2-3B-Instruct graphs none
+[22:05:23] DONE  decode Llama-3.2-3B-Instruct graphs none (52s)
+    {"mode": "graphs", "quant": "none", "spec": null, "decode_tokens_per_s": 27.8, "itl_ms": 35.98, "peak_memory_gib": 6.2}
+[22:05:23] START decode Llama-3.2-3B-Instruct graphs int4
+[22:05:57] DONE  decode Llama-3.2-3B-Instruct graphs int4 (34s)
+    {"mode": "graphs", "quant": "int4", "spec": null, "decode_tokens_per_s": 78.2, "itl_ms": 12.79, "peak_memory_gib": 2.44}
+[22:05:57] START decode Llama-3.2-3B-Instruct graphs fp8
+[22:06:38] DONE  decode Llama-3.2-3B-Instruct graphs fp8 (41s)
+    {"mode": "graphs", "quant": "fp8", "spec": null, "decode_tokens_per_s": 46.2, "itl_ms": 21.64, "peak_memory_gib": 3.57}
+[22:06:38] START decode Llama-3.2-1B-Instruct spec ngram
+[22:07:38] DONE  decode Llama-3.2-1B-Instruct spec ngram (60s)
+    {"mode": "spec", "quant": "none", "spec": "ngram", "decode_tokens_per_s": 18.7, "itl_ms": 53.55, "peak_memory_gib": 2.41, "acceptance_rate": 0.093, "tokens_per_target_pass": 1.18}
+[22:07:38] START decode Llama-3.2-3B-Instruct spec ngram
+[22:09:26] DONE  decode Llama-3.2-3B-Instruct spec ngram (108s)
+    {"mode": "spec", "quant": "none", "spec": "ngram", "decode_tokens_per_s": 9.0, "itl_ms": 110.6, "peak_memory_gib": 6.12, "acceptance_rate": 0.135, "tokens_per_target_pass": 1.22}
+[22:09:26] START decode Llama-3.2-3B-Instruct spec draft-1B int4
+[22:11:05] DONE  decode Llama-3.2-3B-Instruct spec draft-1B int4 (99s)
+    {"mode": "spec", "quant": "int4", "spec": "models/Llama-3.2-1B-Instruct", "decode_tokens_per_s": 10.2, "itl_ms": 98.39, "peak_memory_gib": 3.31, "acceptance_rate": 0.562, "tokens_per_target_pass": 3.24}
+[22:11:05] START prefill Llama-3.2-1B-Instruct
+[22:12:24] DONE  prefill Llama-3.2-1B-Instruct (79s)
+      "decode_tokens_per_s_batch1": 17.5,
+  "peak_memory_gib": 2.42
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\phase1-Llama-3.2-1B-Instruct.json
+[22:12:24] START prefill Llama-3.2-3B-Instruct
+[22:14:42] DONE  prefill Llama-3.2-3B-Instruct (138s)
+      "decode_tokens_per_s_batch1": 10.0,
+  "peak_memory_gib": 6.12
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\phase1-Llama-3.2-3B-Instruct.json
+[22:14:42] START perplexity Llama-3.2-1B-Instruct none
+[22:15:39] DONE  perplexity Llama-3.2-1B-Instruct none (57s)
+    }
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\ppl-Llama-3.2-1B-Instruct-none.json
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (289076 > 131072). Running this sequence through the model will result in indexing errors
+[22:15:39] START perplexity Llama-3.2-1B-Instruct int4
+[22:17:33] DONE  perplexity Llama-3.2-1B-Instruct int4 (114s)
+      "seconds": 94.9
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\ppl-Llama-3.2-1B-Instruct-int4-g128.json
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (289076 > 131072). Running this sequence through the model will result in indexing errors
+[22:17:33] START perplexity Llama-3.2-1B-Instruct fp8
+[22:18:26] DONE  perplexity Llama-3.2-1B-Instruct fp8 (52s)
+    }
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\ppl-Llama-3.2-1B-Instruct-fp8.json
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (289076 > 131072). Running this sequence through the model will result in indexing errors
+[22:18:26] START perplexity Llama-3.2-3B-Instruct none
+[22:22:03] DONE  perplexity Llama-3.2-3B-Instruct none (217s)
+    }
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\ppl-Llama-3.2-3B-Instruct-none.json
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (289076 > 131072). Running this sequence through the model will result in indexing errors
+[22:22:03] START perplexity Llama-3.2-3B-Instruct int4
+[22:26:47] DONE  perplexity Llama-3.2-3B-Instruct int4 (284s)
+    }
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\ppl-Llama-3.2-3B-Instruct-int4-g128.json
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (289076 > 131072). Running this sequence through the model will result in indexing errors
+[22:26:47] START perplexity Llama-3.2-3B-Instruct fp8
+[22:28:39] DONE  perplexity Llama-3.2-3B-Instruct fp8 (112s)
+    }
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\ppl-Llama-3.2-3B-Instruct-fp8.json
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (289076 > 131072). Running this sequence through the model will result in indexing errors
+[22:29:04] START load Llama-3.2-1B-Instruct c1
+[22:30:08] FAIL  load Llama-3.2-1B-Instruct c1 (63s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c1.json
+GATE FAIL
+[22:30:08] START load Llama-3.2-1B-Instruct c4
+[22:31:11] FAIL  load Llama-3.2-1B-Instruct c4 (63s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c4.json
+GATE FAIL
+[22:31:11] START load Llama-3.2-1B-Instruct c16
+[22:32:40] DONE  load Llama-3.2-1B-Instruct c16 (89s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c16.json
+GATE PASS
+[22:32:40] START load Llama-3.2-1B-Instruct c32
+[22:34:13] DONE  load Llama-3.2-1B-Instruct c32 (93s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c32.json
+GATE PASS
+[22:34:13] START load Llama-3.2-1B-Instruct c64
+[22:35:23] DONE  load Llama-3.2-1B-Instruct c64 (70s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c64.json
+GATE PASS
+[22:35:23] START tests cpu
+[22:36:04] DONE  tests cpu (41s)
+    ........................................................................ [ 73%]
+..........................                                               [100%]
+98 passed, 222 deselected in 37.49s
+[22:36:04] START tests gpu
+[22:36:32] DONE  tests gpu (29s)
+    .....................                                                    [100%]
+21 passed, 299 deselected in 25.73s
+[22:36:32] START gate1 1B fp32
+[23:01:54] DONE  gate1 1B fp32 (1521s)
+    ........................................................................ [ 36%]
+........................................................................ [ 72%]
+........................................................                 [100%]
+200 passed in 1518.10s (0:25:18)
+[23:01:54] START gate1 3B bf16
+[23:36:15] FAIL  gate1 3B bf16 (2061s)
+    FAILED tests/test_golden.py::test_greedy_matches_hf[long-32] - AssertionError...
+FAILED tests/test_golden.py::test_greedy_matches_hf[long-42] - AssertionError...
+FAILED tests/test_golden.py::test_greedy_matches_hf[long-46] - AssertionError...
+5 failed, 195 passed, 14 warnings in 2057.28s (0:34:17)
+[23:36:45] START soak (Gate 2)
+[23:57:23] run_all: soak
+[23:57:49] START soak (Gate 2)
+[23:59:32] run_all: soak
+[23:59:50] START soak (Gate 2)
+[00:04:10] run_all: load soak
+[00:04:34] START load Llama-3.2-1B-Instruct c1
+[00:05:20] FAIL  load Llama-3.2-1B-Instruct c1 (45s)
+    [    30s] ok=22 err=0 mismatch=1 tok/s=67 running=1 kv=1% preempt=0
+[00:05:20] START load Llama-3.2-1B-Instruct c4
+[00:07:15] run_all: load soak
+[00:07:42] START load Llama-3.2-1B-Instruct c1
+[00:08:45] FAIL  load Llama-3.2-1B-Instruct c1 (63s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c1.json
+GATE FAIL
+[00:08:45] START load Llama-3.2-1B-Instruct c4
+[00:10:06] FAIL  load Llama-3.2-1B-Instruct c4 (81s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c4.json
+GATE FAIL
+[00:10:06] START load Llama-3.2-1B-Instruct c16
+[00:12:18] FAIL  load Llama-3.2-1B-Instruct c16 (132s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c16.json
+GATE FAIL
+[00:12:18] START load Llama-3.2-1B-Instruct c32
+[00:14:45] FAIL  load Llama-3.2-1B-Instruct c32 (147s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c32.json
+GATE FAIL
+[00:14:45] START load Llama-3.2-1B-Instruct c64
+[00:18:08] FAIL  load Llama-3.2-1B-Instruct c64 (202s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c64.json
+GATE FAIL
+[00:18:28] START soak (Gate 2)
+[00:52:45] FAIL  soak (Gate 2) (2058s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\gate2-soak.json
+GATE FAIL
+[00:52:56] run_all: finished
+[00:52:58] run_all: tests invariance load
+[00:52:58] START tests cpu
+[00:53:38] DONE  tests cpu (40s)
+    ........................................................................ [ 73%]
+..........................                                               [100%]
+98 passed, 224 deselected in 37.24s
+[00:53:38] START tests gpu
+[00:54:07] DONE  tests gpu (29s)
+    .......................                                                  [100%]
+23 passed, 299 deselected in 26.14s
+[00:54:07] START invariance 1B float32
+[00:57:46] DONE  invariance 1B float32 (219s)
+      "cached_prompt_tokens": 3968,
+  "seconds": 199.5
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\invariance-Llama-3.2-1B-Instruct-float32.json
+[00:57:46] START invariance 1B bfloat16
+[01:00:02] DONE  invariance 1B bfloat16 (136s)
+    {'request': 'code-21#2', 'diverged_at': 60, 'top2_gap': 0.125}
+{'request': 'code-22#2', 'diverged_at': 112, 'top2_gap': 0.125}
+{'request': 'code-24#2', 'diverged_at': 14, 'top2_gap': 0.125}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\invariance-Llama-3.2-1B-Instruct-bfloat16.json
+[01:00:20] START load Llama-3.2-1B-Instruct c1
+[01:01:23] FAIL  load Llama-3.2-1B-Instruct c1 (63s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c1.json
+GATE FAIL
+[01:01:23] START load Llama-3.2-1B-Instruct c4
+[01:02:45] FAIL  load Llama-3.2-1B-Instruct c4 (82s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c4.json
+GATE FAIL
+[01:02:45] START load Llama-3.2-1B-Instruct c16
+[01:05:11] FAIL  load Llama-3.2-1B-Instruct c16 (146s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c16.json
+GATE FAIL
+[01:05:11] START load Llama-3.2-1B-Instruct c32
+[01:07:36] FAIL  load Llama-3.2-1B-Instruct c32 (145s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c32.json
+GATE FAIL
+[01:07:36] START load Llama-3.2-1B-Instruct c64
+[01:11:11] FAIL  load Llama-3.2-1B-Instruct c64 (215s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c64.json
+GATE FAIL
+[01:11:19] run_all: finished

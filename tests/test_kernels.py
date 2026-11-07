@@ -86,3 +86,49 @@ def test_cuda_graphs_match_eager(graphs):
     assert (eng.graphs is not None) == graphs
     assert eng.generate(prompts, params) == want
     assert eng.num_free_blocks == 64
+
+
+@pytest.mark.parametrize("budget", [4096, 8])
+def test_mixed_steps_match_static_loop(budget, monkeypatch):
+    """Prompts join while others decode, get chunked (budget 8) and hit the prefix cache:
+    every step mixes kernel decode rows with per-chunk SDPA. Tokens must not change."""
+    from engine.config import ModelConfig
+    from engine.model.llama import LlamaForCausalLM
+    from engine.runtime.engine import LLMEngine
+    from engine.runtime.generate import generate
+    from engine.runtime.paged_cache import PagedBatch
+    from engine.runtime.params import SamplingParams
+    from tests.conftest import TINY_RAW
+    from tests.test_generate import ByteTokenizer
+
+    torch.manual_seed(0)
+    model = LlamaForCausalLM(ModelConfig.from_dict(TINY_RAW)).cuda().eval()
+    shared = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    prompts = {"a": [5, 6, 7], "b": shared + [1, 2], "c": [99], "d": shared + [3],
+               "e": list(range(20, 41)), "f": shared}  # fmt: skip
+    params = SamplingParams(temperature=0, max_tokens=12)
+    want = {
+        rid: [o.token_id for o in generate(model, ByteTokenizer(), [p], params, ())]
+        for rid, p in prompts.items()
+    }
+    calls = []
+    real = PagedBatch._mixed.__func__
+    monkeypatch.setattr(PagedBatch, "_mixed",
+                        classmethod(lambda cls, *a: calls.append(1) or real(cls, *a)))  # fmt: skip
+    eng = LLMEngine(
+        model, ByteTokenizer(), (), num_blocks=64, block_size=4, max_num_seqs=8,
+        max_num_batched_tokens=budget, use_triton=True, enable_cuda_graphs=False,
+        debug_checks=True,
+    )  # fmt: skip
+    got = {rid: [] for rid in prompts}
+    pending = list(prompts.items())
+    while pending or eng.has_unfinished():
+        if pending:
+            rid, p = pending.pop(0)
+            eng.add_request(rid, p, params)
+        for out in eng.step():
+            got[out.request_id].append(out.token_id)
+    assert got == want
+    assert calls, "no mixed step happened"
+    assert eng.cached_prompt_tokens_total > 0
+    assert eng.num_free_blocks == 64
