@@ -68,6 +68,9 @@ class ScheduledBatch:
         return sum(self.num_tokens)
 
 
+COALESCE_PER_STEP = 8  # running requests per step a new prompt may be held
+
+
 class Scheduler:
     def __init__(
         self,
@@ -85,6 +88,12 @@ class Scheduler:
         self.waiting: deque[Sequence] = deque()
         self.running: list[Sequence] = []
         self.num_preemptions = 0
+        # Prompt coalescing (on when the engine replays decode steps as CUDA graphs): a
+        # step that reads prompt tokens cannot be a graph and costs several decode steps,
+        # whatever its size. So while requests are decoding, new prompts may wait up to
+        # one step per COALESCE_PER_STEP running requests and are then read together.
+        self.coalesce_prefill = False
+        self._held_steps = 0
 
     @property
     def capacity_tokens(self) -> int:
@@ -149,7 +158,11 @@ class Scheduler:
         kept.extend(queue)  # out of budget this step; they run next step
         self.running = kept
 
-        # 2. Admit waiting sequences with what is left.
+        # 2. Admit waiting sequences with what is left, unless coalescing holds them.
+        if self.waiting and self._hold_prompts(counts):
+            self._held_steps += 1
+            return ScheduledBatch(seqs, counts) if seqs else None
+        admitted = len(seqs)
         while self.waiting and budget > 0 and len(self.running) < self.max_num_seqs:
             seq = self.waiting[0]
             if seq.num_computed == 0:
@@ -173,7 +186,16 @@ class Scheduler:
             counts.append(n)
             budget -= n
 
+        if len(seqs) > admitted:
+            self._held_steps = 0
         return ScheduledBatch(seqs, counts) if seqs else None
+
+    def _hold_prompts(self, counts: list[int]) -> bool:
+        """Keep waiting prompts out of this step so they can be read together later?"""
+        if not self.coalesce_prefill or not counts or any(c > 1 for c in counts):
+            return False  # nothing decoding, or this step is not a graph step anyway
+        limit = -(-len(self.running) // COALESCE_PER_STEP)  # ceil: 64 running -> 8 steps
+        return self._held_steps + 1 < limit
 
     def _chunk(self, seq: Sequence, budget: int) -> int:
         """Tokens to feed ``seq`` this step within ``budget`` (0 = wait for the next step)."""

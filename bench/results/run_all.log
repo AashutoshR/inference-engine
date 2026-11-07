@@ -270,3 +270,94 @@ GATE FAIL
 saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\vllm-Llama-3.2-1B-Instruct-c64.json
 GATE FAIL
 [02:11:18] run_all: finished
+[02:36:33] run_all: tests invariance load soak
+[02:36:33] START tests cpu
+[02:37:12] DONE  tests cpu (39s)
+    ........................................................................ [ 72%]
+...........................                                              [100%]
+99 passed, 225 deselected in 36.32s
+[02:37:12] START tests gpu
+[02:37:42] DONE  tests gpu (30s)
+    ........................                                                 [100%]
+24 passed, 300 deselected in 27.10s
+[02:37:42] START invariance 1B float32
+[02:41:19] DONE  invariance 1B float32 (216s)
+      "cached_prompt_tokens": 3968,
+  "seconds": 197.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\invariance-Llama-3.2-1B-Instruct-float32.json
+[02:41:19] START invariance 1B bfloat16
+[02:43:51] DONE  invariance 1B bfloat16 (152s)
+    {'request': 'code-14#2', 'diverged_at': 15, 'top2_gap': 0.125}
+{'request': 'code-18#2', 'diverged_at': 42, 'top2_gap': 0.125}
+{'request': 'code-22#2', 'diverged_at': 112, 'top2_gap': 0.125}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\invariance-Llama-3.2-1B-Instruct-bfloat16.json
+[02:44:15] START load Llama-3.2-1B-Instruct c1
+[02:45:18] FAIL  load Llama-3.2-1B-Instruct c1 (63s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c1.json
+GATE FAIL
+[02:45:18] START load Llama-3.2-1B-Instruct c4
+[02:46:38] FAIL  load Llama-3.2-1B-Instruct c4 (80s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c4.json
+GATE FAIL
+[02:46:38] START load Llama-3.2-1B-Instruct c16
+[02:48:55] FAIL  load Llama-3.2-1B-Instruct c16 (137s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c16.json
+GATE FAIL
+[02:48:55] START load Llama-3.2-1B-Instruct c32
+[02:52:19] FAIL  load Llama-3.2-1B-Instruct c32 (204s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c32.json
+GATE FAIL
+[02:52:19] START load Llama-3.2-1B-Instruct c64
+[02:56:27] FAIL  load Llama-3.2-1B-Instruct c64 (248s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c64.json
+GATE FAIL
+[02:56:54] START soak (Gate 2)
+[03:31:17] FAIL  soak (Gate 2) (2063s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\gate2-soak.json
+GATE FAIL
+[03:31:27] run_all: finished
+[03:34:13] run_all: load
+[03:34:35] START load Llama-3.2-1B-Instruct c1
+[03:35:38] FAIL  load Llama-3.2-1B-Instruct c1 (64s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c1.json
+GATE FAIL
+[03:35:38] START load Llama-3.2-1B-Instruct c4
+[03:36:56] FAIL  load Llama-3.2-1B-Instruct c4 (78s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c4.json
+GATE FAIL
+[03:36:56] START load Llama-3.2-1B-Instruct c16
+[03:39:24] FAIL  load Llama-3.2-1B-Instruct c16 (148s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c16.json
+GATE FAIL
+[03:39:24] START load Llama-3.2-1B-Instruct c32
+[03:42:40] FAIL  load Llama-3.2-1B-Instruct c32 (196s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c32.json
+GATE FAIL
+[03:42:40] START load Llama-3.2-1B-Instruct c64
+[03:46:49] FAIL  load Llama-3.2-1B-Instruct c64 (249s)
+      "preemptions": 0.0
+}
+saved C:\Users\enaas\OneDrive\Desktop\project\inference-engine\bench\results\load-Llama-3.2-1B-Instruct-c64.json
+GATE FAIL
+[03:46:58] run_all: finished

@@ -249,3 +249,30 @@ def test_random_workloads_match_static_loop(tiny_model, data):
         params = SamplingParams(temperature=0, max_tokens=n)
         want = [o.token_id for o in generate(tiny_model, ByteTokenizer(), [prompt], params, ())]
         assert tokens == want, rid
+
+
+def test_prompt_coalescing_holds_new_prompts_and_output_is_unchanged(tiny_model, expected):
+    """With 16 requests decoding, a newcomer waits ceil(16 / 8) = 2 steps (held once) so
+    prompts can be read together; tokens are unchanged."""
+    eng = make_engine(tiny_model, coalesce_prefill=True, max_num_seqs=32)
+    for i in range(16):
+        eng.add_request(f"x{i}", PROMPTS["c"], GREEDY)
+    got: dict[str, list[int]] = {}
+
+    def step() -> None:
+        for out in eng.step():
+            got.setdefault(out.request_id, []).append(out.token_id)
+
+    step()  # nothing was running: admitted at once
+    assert not eng.scheduler.waiting
+    step()
+    eng.add_request("a", PROMPTS["a"], GREEDY)
+    step()  # 16 decoding: "a" is held for this step
+    assert [s.request_id for s in eng.scheduler.waiting] == ["a"]
+    step()  # and admitted on the next
+    assert not eng.scheduler.waiting
+    while eng.has_unfinished():
+        step()
+    assert got["a"] == expected["a"]
+    assert all(got[f"x{i}"] == expected["c"] for i in range(16))
+    assert eng.num_free_blocks == 64

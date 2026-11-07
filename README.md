@@ -18,10 +18,10 @@ exactly the same tokens as a plain one-request loop.
 
 ![The live dashboard while 64 users stream at once](docs/images/dashboard.png)
 
-*The live dashboard, captured during the 64-user benchmark: 63 requests generating in the
-same steps, 82% of prompt tokens served from the prefix cache, nothing paused for memory.
-(The rate tiles show that moment, with the screenshot tool competing for the CPU; the
-benchmark's sustained rate is 911 tokens per second.)*
+*The live dashboard during a 64-user run: 55 requests generating in the same steps, 67%
+of prompt tokens served from the prefix cache, nothing paused for memory. In the step
+chart, flat teal steps are CUDA-graph replays; the tall amber spikes are steps where
+several waiting prompts are read together (prompt coalescing, below).*
 
 **Results:** every gate, every benchmark and every chart is in [RESULTS.md](RESULTS.md),
 with the headline numbers [below](#results).
@@ -63,6 +63,7 @@ builds every one of them by hand, explains each one, and shows them working live
 | Memory runs out mid-generation | **Preemption**: pause the newest request, free its memory, resume it later | No crashes, no out-of-memory errors |
 | Attention reads scattered memory | **Triton paged attention kernel**: reads keys and values straight from the blocks | No copying into a contiguous buffer |
 | Thousands of tiny GPU launches per word | **CUDA graphs**: each decode step recorded once and replayed | Python and launch overhead removed |
+| New prompts knock every step off the fast path | **Prompt coalescing**: newcomers wait a few steps and are read together, all chunks in one FlashAttention varlen call | 64-user throughput from 52% to 77% of vLLM |
 | Weights too big or too slow to read | **INT4 and FP8 weights**: 4-bit or 8-bit weights unpacked inside the matmul | Llama 3B: 6.2 GiB to 2.4 GiB, 2.8x faster |
 | One word per weight read | **Speculative decoding**: guess several words cheaply, check them all at once | Several words per pass, same output distribution |
 | Clients expect OpenAI | **OpenAI-compatible API** with streaming, cancellation, timeouts and load shedding | Works with existing tools |
@@ -179,8 +180,8 @@ tested for **identical output** against something simpler.
 | HTTP API | The engine called directly; streamed text equals non-streamed text |
 
 ```bash
-pytest                       # 98 CPU tests, about 40 seconds
-pytest -m gpu                # 23 GPU tests: Triton kernel, CUDA graphs, INT4, FP8
+pytest                       # 99 CPU tests, about 40 seconds
+pytest -m gpu                # 24 GPU tests: Triton kernel, varlen, CUDA graphs, INT4, FP8
 ENGINE_MODEL_DIR=models/Llama-3.2-1B-Instruct pytest -m slow     # the 200-prompt gate
 ```
 
@@ -208,10 +209,10 @@ Measured on one **RTX 4060 Laptop GPU (8 GB)**, Windows 11, PyTorch 2.15, CUDA 1
 | --- | --- | --- |
 | **1. Same answers as Hugging Face**, Llama 3.2 1B, FP32 | ✅ **pass** | 200 of 200 prompts identical: 18,894 tokens, not one differs |
 | **1. Same answers as Hugging Face**, Llama 3.2 3B, BF16 | ❌ **fail, 195 / 200** | 181 identical, 14 near-ties; 5 split where the top two choices were 0.125 apart (see below) |
-| **2. 64 users for 30 minutes** | ❌ **fail, as written** | 15,941 requests at 833 tokens/s: 0 errors, 0 out-of-memory, 0 preemptions, all KV memory returned. Fails only on its strictest check: 153 prompts got a different greedy answer on a repeat (see below) |
-| **3. 70% of vLLM's throughput** | ❌ **fail, 52%** | 911 vs 1,757 tokens/s at 64 users against vLLM v0.32.0 on the same GPU; 81% at 1 user (see below) |
-| Unit and property tests (CPU) | ✅ pass | 98 passed in 37 s |
-| GPU tests (Triton kernel, CUDA graphs, INT4, FP8) | ✅ pass | 23 passed in 26 s |
+| **2. 64 users for 30 minutes** | ❌ **fail, as written** | 25,818 requests at 1,347 tokens/s: 0 errors, 0 out-of-memory, 0 preemptions, all KV memory returned. Fails only on its strictest check: 159 prompts got a different greedy answer on a repeat (see below) |
+| **3. 70% of vLLM's throughput** | ✅ **pass, 77%** | 1,360 vs 1,757 tokens/s at 64 users against vLLM v0.32.0 on the same GPU (73% in an earlier sweep); it started at 52% (see below) |
+| Unit and property tests (CPU) | ✅ pass | 99 passed in 36 s |
+| GPU tests (Triton kernel, CUDA graphs, INT4, FP8, varlen) | ✅ pass | 24 passed in 27 s |
 
 **About the 5 failures on 3B.** At each one, Hugging Face's own top two candidate tokens
 were exactly 0.125 apart. That is one BF16 rounding step for logits of this size, the
@@ -251,17 +252,17 @@ completions back to back for 60 seconds.
 
 | Users | Tokens/s | Requests/s | First token, median | First token, p99 | Per token, median | Errors |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 69 | 0.7 | 93 ms | 293 ms | 13 ms | 0 |
-| 4 | 215 | 2.4 | 110 ms | 229 ms | 15 ms | 0 |
-| 16 | 535 | 5.5 | 124 ms | 426 ms | 20 ms | 0 |
-| 32 | 719 | 7.4 | 156 ms | 696 ms | 27 ms | 0 |
-| 64 | **911** | 9.5 | 247 ms | 1,456 ms | 41 ms | 0 |
-| 64, for 30 minutes (Gate 2) | 833 | 8.8 | 238 ms | 650 ms | 51 ms | 0 |
+| 1 | 71 | 0.8 | 96 ms | 339 ms | 13 ms | 0 |
+| 4 | 210 | 2.3 | 114 ms | 352 ms | 15 ms | 0 |
+| 16 | 534 | 5.5 | 143 ms | 626 ms | 20 ms | 0 |
+| 32 | 889 | 9.1 | 213 ms | 522 ms | 25 ms | 0 |
+| 64 | **1,360** | 14.3 | 389 ms | 677 ms | 35 ms | 0 |
+| 64, for 30 minutes (Gate 2) | 1,347 | 14.3 | 400 ms | 703 ms | 36 ms | 0 |
 
 ![throughput](docs/results/load-throughput.svg)
 
-Throughput grows 13x from 1 to 64 users while each user's stream slows only from 13 to
-41 ms per token, still about 24 tokens per second each, faster than anyone reads. Zero errors and zero preemptions at every level, and all KV memory
+Throughput grows 19x from 1 to 64 users while each user's stream slows only from 13 to
+35 ms per token, still about 29 tokens per second each, faster than anyone reads. Zero errors and zero preemptions at every level, and all KV memory
 returned at the end of every run.
 
 ### Against vLLM (Gate 3)
@@ -273,23 +274,46 @@ caching, chunked prefill).
 
 | Users | engine tok/s | vLLM tok/s | engine / vLLM | First token p50, engine / vLLM | Per token p50, engine / vLLM |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 69 | 86 | **81%** | 93 / 31 ms | 13.2 / 10.7 ms |
-| 4 | 215 | 319 | 68% | 110 / 50 ms | 15.0 / 11.3 ms |
-| 16 | 535 | 990 | 54% | 124 / 88 ms | 20.1 / 12.2 ms |
-| 32 | 719 | 1,360 | 53% | **156 / 168 ms** | 26.8 / 13.9 ms |
-| 64 | 911 | 1,757 | **52%** | **247 / 414 ms** | 41.2 / 19.8 ms |
+| 1 | 71 | 86 | **83%** | 96 / 31 ms | 12.8 / 10.7 ms |
+| 4 | 210 | 319 | 66% | 114 / 50 ms | 15.0 / 11.3 ms |
+| 16 | 534 | 990 | 54% | 143 / 88 ms | 20.3 / 12.2 ms |
+| 32 | 889 | 1,360 | 65% | 213 / 168 ms | 25.4 / 13.9 ms |
+| 64 | **1,360** | 1,757 | **77%** | **389 / 414 ms** | 34.9 / 19.8 ms |
 
 ![engine vs vLLM](docs/results/vs-vllm.svg)
 
-The gate asked for 70% at 64 users; the engine reaches 52%, so it **fails**. The
-per-token column shows where the gap is: with 64 users, one engine step takes about
-41 ms against vLLM's 20. vLLM compiles the whole model into fused kernels with
-`torch.compile` and FlashAttention, while the engine still builds each step's batch in
-Python and runs mixed prompt-and-decode steps outside CUDA graphs. With one user, where
-that overhead matters least, the engine is at 81%. And it gets the first token out
-*faster* than vLLM at 32 and 64 users (247 against 414 ms at 64). One likely reason: the
-engine reads waiting prompts in large slices (up to 4,096 tokens per step), which starts
-answers sooner but makes each step slower for everyone already generating.
+The gate asks for 70% at 64 users: the engine reaches **77%**, and 73% in an earlier sweep
+under the same conditions, so it **passes**. It did not at first: the first run reached
+52% (911 tokens/s). Profiling one step at a time showed why, and two changes fixed it.
+
+**1. Prompt coalescing.** With 64 users, someone finishes almost every other step and
+the next request arrives. Reading even a few prompt tokens forces the whole step off the
+CUDA graph onto the eager path, and on this machine an eager step costs about 85 ms
+however small it is (it is bound by launching ~700 small GPU operations from Python),
+against 20 ms for a graph step. So 41% of steps were eager and took 77% of the time. Now
+a new prompt may wait up to one step per 8 running requests (8 steps at 64 users, about
+150 ms) and is read together with whoever else arrived. Eager steps fell to 10%.
+
+**2. One attention call for all prompt chunks.** The eager steps that remain now read
+several prompts at once, and attention handled them one chunk at a time in every layer.
+They now go through a single FlashAttention variable-length call
+(`torch.nn.attention.varlen`) per layer, which took an eager step from 195 to 88 ms.
+
+| Step | 64-user throughput, engine alone (no HTTP) |
+| --- | ---: |
+| Before | 941 tokens/s |
+| + prompt coalescing | 1,170 tokens/s |
+| + one varlen attention call | **1,588 tokens/s** |
+
+The cost is a little latency at the start: first-token p50 at 64 users went from 247 to
+389 ms, still level with vLLM's 414. Coalescing only holds prompts when requests are
+decoding on CUDA graphs and switches itself off at 8 or fewer users;
+`--no-prefill-coalescing` turns it off entirely. The FP32 batching test below still
+gives 128 of 128 identical answers with both changes in.
+
+vLLM is still about twice as fast per step at low load (12 against 20 ms at 16 users):
+it compiles the whole model into fused kernels with `torch.compile`, where the engine
+still launches each small operation separately and builds every step's batch in Python.
 
 ### Batching changes rounding, not math
 
@@ -301,7 +325,7 @@ in batches of up to 64 with prompts arriving mid-flight and the prefix cache on.
 | Precision | Loaded requests | Same tokens as running alone | Different | Largest top-2 gap where they split |
 | --- | ---: | ---: | ---: | ---: |
 | FP32 | 128 | **128** | 0 | |
-| BF16 | 128 | 63 | 65 | 0.25 |
+| BF16 | 128 | 62 | 66 | 0.25 |
 
 In FP32 every token matches, so batching, paging and caching compute exactly the right
 thing. In BF16 half the answers drift, and every drift starts at a token where the
@@ -338,10 +362,9 @@ both smaller and better than BF16 1B (12.01 vs 13.17, 2.45 vs 2.62 GiB).
   speed.
 - **Two gates fail as written**: Gate 1 on 3B and Gate 2, both only on BF16 rounding
   ties. Their rules should measure gaps in BF16 rounding steps rather than a fixed 0.01.
-- **Gate 3 fails at 52% of vLLM.** The next steps are clear from the numbers: build each
-  step's batch on the GPU instead of in Python lists, capture mixed steps in CUDA graphs,
-  and fuse the small per-layer kernels (norm, rotary, activation) the way vLLM's
-  `torch.compile` pass does.
+- **vLLM is still ahead at 4 to 32 users** (54 to 66%). Next: fuse the small per-layer
+  operations (norm, rotary, activation) so eager steps launch fewer kernels, and build
+  each step's batch on the GPU instead of in Python lists.
 
 ## Quickstart
 
@@ -440,8 +463,8 @@ Triton and the standard library.
 Built in five phases, each closed by a measurable gate:
 
 1. **Correct baseline.** Own forward pass and sampler. Gate: identical to Hugging Face on 200 prompts. *Passed for 1B in FP32 (200/200); 3B in BF16 at 195/200, the 5 being one-rounding-step ties.*
-2. **Serving core.** Paged cache, continuous batching, Triton kernel, OpenAI API. Gate: 64 concurrent streams for 30 minutes with no errors or leaks. *Ran: 0 errors, 0 leaks, 833 tokens/s; fails only the strict repeat-answer check, which BF16 rounding breaks.*
-3. **Throughput and latency.** Chunked prefill, prefix caching, preemption, CUDA graphs. Gate: 70% of vLLM's throughput on the same GPU. *Ran against vLLM v0.32.0: 52% at 64 users, 81% at 1 user; not passed yet.*
+2. **Serving core.** Paged cache, continuous batching, Triton kernel, OpenAI API. Gate: 64 concurrent streams for 30 minutes with no errors or leaks. *Ran: 0 errors, 0 leaks, 1,347 tokens/s; fails only the strict repeat-answer check, which BF16 rounding breaks.*
+3. **Throughput and latency.** Chunked prefill, prefix caching, preemption, CUDA graphs, prompt coalescing. Gate: 70% of vLLM's throughput on the same GPU. *Passed: 77% of vLLM v0.32.0 at 64 users (52% before profiling).*
 4. **Quantization and speculation.** INT4, FP8, speculative decoding.
 5. **Hardening.** Load and soak tests, metrics, dashboard, Docker, docs.
 

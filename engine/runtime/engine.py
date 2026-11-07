@@ -59,6 +59,7 @@ class LLMEngine:
         enable_chunked_prefill: bool = True,
         use_triton: bool | None = None,
         enable_cuda_graphs: bool | None = None,
+        coalesce_prefill: bool | None = None,
         max_model_len: int | None = None,
         debug_checks: bool = False,
     ) -> None:
@@ -95,6 +96,10 @@ class LLMEngine:
             self.graphs = DecodeGraphs(
                 model, self.cache, num_blocks, max_num_seqs, -(-self.max_model_len // block_size)
             )
+        # Holding new prompts for a few steps only pays when decode steps are graphs.
+        self.scheduler.coalesce_prefill = (
+            self.graphs is not None if coalesce_prefill is None else coalesce_prefill
+        )
         self.prompt_tokens_total = 0
         self.cached_prompt_tokens_total = 0
         self.debug_checks = debug_checks

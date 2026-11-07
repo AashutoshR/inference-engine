@@ -10,17 +10,17 @@ A browsable version of this page: [`docs/results.html`](docs/results.html).
 | --- | --- | --- |
 | Gate 1 · 1B FP32 exact | ✅ pass | 200 exact, 0 near-ties, 0 failed of 200 |
 | Gate 1 · 3B BF16 near-tie | ❌ fail | 181 exact, 14 near-ties, 5 failed of 200 |
-| Gate 2 · 64 streams soak | ❌ fail | 30 min, 15,941 requests, 0 errors, KV left in use 0%, repeat answers differed: 153 prompts; of 86 measured, 84 split where the top two choices were within 0.25 (largest gap 0.5) |
-| Gate 3 · 70% of vLLM | ❌ fail | 52% of vLLM at 64 users: 911 vs 1,756 tokens/s |
-| Unit tests (CPU) | ✅ pass | 98 passed, 0 failed, 37.2 s |
-| GPU tests | ✅ pass | 23 passed, 0 failed, 26.1 s |
+| Gate 2 · 64 streams soak | ❌ fail | 30 min, 25,818 requests, 0 errors, KV left in use 0%, repeat answers differed: 159 prompts; of 89 measured, 87 split where the top two choices were within 0.25 (largest gap 1.5) |
+| Gate 3 · 70% of vLLM | ✅ pass | 77% of vLLM at 64 users: 1,360 vs 1,756 tokens/s |
+| Unit tests (CPU) | ✅ pass | 99 passed, 0 failed, 36.3 s |
+| GPU tests | ✅ pass | 24 passed, 0 failed, 27.1 s |
 
 ## Headline numbers
 
 | | | |
 | --- | --- | --- |
 | One user, 1B | **159 tok/s** | 9.6x the Phase 1 loop |
-| Many users, 1B | **911 tok/s** | 64 concurrent streams |
+| Many users, 1B | **1,360 tok/s** | 64 concurrent streams |
 | Matches Hugging Face | **395 / 400** | prompts, 38,136 tokens compared |
 | INT4 quality cost, 3B | **+0.96** | perplexity, 6.31 to 2.45 GiB |
 
@@ -81,13 +81,13 @@ The real server (`engine serve`, 1B, BF16) under N clients that each stream chat
 
 | Users | Output tok/s | Requests/s | TTFT p50 | TTFT p99 | ITL p50 | ITL p99 | Errors | Preemptions | Repeat answers differed |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 1 | 69 | 0.74 | 93 ms | 293 ms | 13.2 ms | 17.0 ms | 0 | 0 | 1 prompt |
-| 4 | 215 | 2.35 | 110 ms | 229 ms | 15.0 ms | 83.1 ms | 0 | 0 | 12 prompts; of 8 measured, 8 split where the top two choices were within 0.25 (largest gap 0.125) |
-| 16 | 535 | 5.5 | 124 ms | 426 ms | 20.1 ms | 102.8 ms | 0 | 0 | 48 prompts; of 29 measured, 28 split where the top two choices were within 0.25 (largest gap 2.25) |
-| 32 | 719 | 7.42 | 156 ms | 696 ms | 26.8 ms | 125.9 ms | 0 | 0 | 45 prompts; of 28 measured, 28 split where the top two choices were within 0.25 (largest gap 0.25) |
-| 64 | 911 | 9.5 | 247 ms | 1456 ms | 41.2 ms | 174.1 ms | 0 | 0 | 86 prompts; of 52 measured, 51 split where the top two choices were within 0.25 (largest gap 1.625) |
+| 1 | 71 | 0.76 | 96 ms | 339 ms | 12.8 ms | 15.5 ms | 0 | 0 | 1 prompt |
+| 4 | 210 | 2.29 | 114 ms | 352 ms | 15.0 ms | 86.0 ms | 0 | 0 | 9 prompts; of 6 measured, 6 split where the top two choices were within 0.25 (largest gap 0.125) |
+| 16 | 534 | 5.47 | 143 ms | 626 ms | 20.3 ms | 101.1 ms | 0 | 0 | 49 prompts; of 29 measured, 28 split where the top two choices were within 0.25 (largest gap 3.625) |
+| 32 | 889 | 9.13 | 213 ms | 522 ms | 25.4 ms | 103.8 ms | 0 | 0 | 78 prompts; of 48 measured, 48 split where the top two choices were within 0.25 (largest gap 0.25) |
+| 64 | 1,360 | 14.25 | 389 ms | 677 ms | 34.9 ms | 125.9 ms | 0 | 0 | 111 prompts; of 64 measured, 59 split where the top two choices were within 0.25 (largest gap 2.5) |
 
-**Soak (Gate 2):** 64 streams for 30 minutes, 15,941 requests, 833 tokens/s, 0 errors, repeat answers differed: 153 prompts; of 86 measured, 84 split where the top two choices were within 0.25 (largest gap 0.5), KV memory in use at the end: 0%.
+**Soak (Gate 2):** 64 streams for 30 minutes, 25,818 requests, 1,347 tokens/s, 0 errors, repeat answers differed: 159 prompts; of 89 measured, 87 split where the top two choices were within 0.25 (largest gap 1.5), KV memory in use at the end: 0%.
 
 ## Against vLLM (Gate 3)
 
@@ -97,11 +97,11 @@ Gate 3 runs the same load test against vLLM v0.32.0, the most widely used open s
 
 | users | engine tok/s | vLLM tok/s | engine / vLLM | first token p50, engine | first token p50, vLLM | per token p50, engine | per token p50, vLLM | repeat answers differed, vLLM |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 69 | 86 | 81% | 93 ms | 31 ms | 13.2 ms | 10.7 ms | 2 prompts |
-| 4 | 215 | 319 | 68% | 110 ms | 50 ms | 15.0 ms | 11.3 ms | 20 prompts; of 12 measured, 12 split where the top two choices were within 0.25 (largest gap 0.125) |
-| 16 | 535 | 990 | 54% | 124 ms | 88 ms | 20.1 ms | 12.2 ms | 83 prompts; of 58 measured, 56 split where the top two choices were within 0.25 (largest gap 3.875) |
-| 32 | 719 | 1,360 | 53% | 156 ms | 168 ms | 26.8 ms | 13.9 ms | 90 prompts; of 58 measured, 55 split where the top two choices were within 0.25 (largest gap 3.875) |
-| 64 | 911 | 1,756 | 52% | 247 ms | 414 ms | 41.2 ms | 19.8 ms | 117 prompts; of 71 measured, 70 split where the top two choices were within 0.25 (largest gap 3.875) |
+| 1 | 71 | 86 | 83% | 96 ms | 31 ms | 12.8 ms | 10.7 ms | 2 prompts |
+| 4 | 210 | 319 | 66% | 114 ms | 50 ms | 15.0 ms | 11.3 ms | 20 prompts; of 12 measured, 12 split where the top two choices were within 0.25 (largest gap 0.125) |
+| 16 | 534 | 990 | 54% | 143 ms | 88 ms | 20.3 ms | 12.2 ms | 83 prompts; of 58 measured, 56 split where the top two choices were within 0.25 (largest gap 3.875) |
+| 32 | 889 | 1,360 | 65% | 213 ms | 168 ms | 25.4 ms | 13.9 ms | 90 prompts; of 58 measured, 55 split where the top two choices were within 0.25 (largest gap 3.875) |
+| 64 | 1,360 | 1,756 | 77% | 389 ms | 414 ms | 34.9 ms | 19.8 ms | 117 prompts; of 71 measured, 70 split where the top two choices were within 0.25 (largest gap 3.875) |
 
 ## Batching changes rounding, not math
 
@@ -110,7 +110,7 @@ Under load, the same greedy prompt can come back with a different answer. Is tha
 | weights | loaded requests | largest batch | identical | differed | largest top-2 gap at a split |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | float32 | 128 | 64 | 128 | 0 |  |
-| bfloat16 | 128 | 64 | 63 | 65 | 0.25 |
+| bfloat16 | 128 | 64 | 62 | 66 | 0.25 |
 
 ## Quality: does quantization hurt?
 

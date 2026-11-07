@@ -50,6 +50,14 @@ leave the batch at every step. Each step has a token budget (`max_num_batched_to
   sequence part-way through its prompt gets the next chunk (**chunked prefill**), so a
   2,000-token prompt never stalls the decodes around it.
 - Leftover budget admits waiting sequences, at most `max_num_seqs` running.
+- **Prompt coalescing** (on with CUDA graphs): a step that reads any prompt tokens
+  cannot replay a decode graph, and an eager step costs about four graph steps however
+  few tokens it reads, because it is bound by launching ~700 small GPU operations from
+  Python. So while sequences are decoding, a new prompt may wait up to one step per 8
+  running sequences (8 steps at 64) and is then read together with the others that
+  arrived meanwhile. It is admitted at once when nothing is decoding or when the step is
+  eager anyway. On the 64-user benchmark this took eager steps from 41% to 10% of all
+  steps. `--no-prefill-coalescing` turns it off.
 - If a running sequence needs a KV block and none is free, the newest running
   sequence is **preempted**: its blocks are freed and it goes back to the front of the
   queue to be recomputed later. Its full blocks stay in the prefix cache, so the
@@ -90,10 +98,16 @@ All attention runs over the flattened tokens of a step, `[1, N]`.
   `engine/kernels/paged_attention.py`: one program per (sequence, query head) walks the
   context through the block table in tiles, with an online softmax, reading K/V
   straight from the paged cache. GQA maps query head `h` to KV head `h // groups`.
-- **Prefill, chunked and mixed steps** use the PyTorch reference: gather each
-  sequence's context through its block table into a padded view, then one
-  `scaled_dot_product_attention` call with a mask that is causal per sequence. The
-  kernel is tested against an independent PyTorch implementation.
+- **Mixed steps** (several sequences, some reading prompt tokens) send the decode rows
+  through the same Triton kernel and all prompt chunks through **one FlashAttention
+  varlen call** (`torch.nn.attention.varlen`): every chunk's context is gathered back to
+  back with one index operation, and the causal mask is aligned bottom-right so each
+  chunk's queries sit at the end of their context, after any prefix-cache hit. In FP32,
+  which FlashAttention does not support, each chunk gets its own SDPA call instead.
+  Nothing is padded, so memory grows with the tokens actually present.
+- **A single sequence's prompt** uses the PyTorch reference: gather its context through
+  the block table, then one `scaled_dot_product_attention` call with a causal mask.
+  The kernel and the varlen path are tested against independent PyTorch implementations.
 
 ## CUDA graphs
 

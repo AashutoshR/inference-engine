@@ -104,6 +104,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         enable_prefix_caching=not args.no_prefix_caching,
         enable_chunked_prefill=not args.no_chunked_prefill,
         enable_cuda_graphs=False if args.no_cuda_graphs else None,
+        coalesce_prefill=False if args.no_prefill_coalescing else None,
     )
     cap = engine.scheduler.capacity_tokens
     print(
@@ -159,6 +160,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--quantization", choices=["none", "int4", "fp8"], default="none")
     serve.add_argument("--group-size", type=int, default=128, help="int4 group size")
     serve.add_argument("--no-cuda-graphs", action="store_true")
+    serve.add_argument(
+        "--no-prefill-coalescing",
+        action="store_true",
+        help="admit new prompts every step instead of reading them together",
+    )
     serve.set_defaults(func=cmd_serve)
     return parser
 

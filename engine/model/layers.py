@@ -203,8 +203,9 @@ class Attention(nn.Module):
         return out[batch.q_valid]  # back to flattened order: sequence by sequence
 
     def _mixed(self, q: torch.Tensor, batch: PagedBatch) -> torch.Tensor:
-        """Decode rows through the Triton kernel, each prompt chunk through its own SDPA.
-        q: [nh, N, hd] -> [N, nh * hd]. Memory scales with the tokens actually present."""
+        """Decode rows through the Triton kernel; prompt chunks through one FlashAttention
+        varlen call (BF16/FP16) or one SDPA each (FP32). q: [nh, N, hd] -> [N, nh * hd].
+        Memory scales with the tokens actually present."""
         cache, layer = batch.cache, self.layer_idx
         qt = q.transpose(0, 1)  # [N, nh, hd]
         out = torch.empty_like(qt)
@@ -215,6 +216,14 @@ class Attention(nn.Module):
             out[rows] = paged_decode_attention(
                 qt[rows].contiguous(), cache.k[layer], cache.v[layer],
                 batch.block_tables, batch.context_lens, cache.block_size,
+            ).to(out.dtype)  # fmt: skip
+        if batch.varlen is not None:
+            from torch.nn.attention.varlen import varlen_attn
+
+            rows, slots, cu_q, cu_k, max_q, max_k = batch.varlen
+            out[rows] = varlen_attn(
+                qt[rows], cache.k[layer][slots], cache.v[layer][slots], cu_q, cu_k,
+                max_q, max_k, window_size=(-1, 0), enable_gqa=True,
             ).to(out.dtype)  # fmt: skip
         groups = self.cfg.num_kv_groups
         for start, n, slots, mask in batch.chunks:

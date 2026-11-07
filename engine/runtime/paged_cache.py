@@ -71,6 +71,10 @@ class PagedBatch:
     decode_rows: torch.Tensor | None = None  # [Bd] flat token index of each decode row
     chunks: list[tuple[int, int, torch.Tensor, torch.Tensor | None]] | None = None
     # (first flat token, length, context slots [ctx], mask [len, ctx] or None = causal)
+    # In BF16/FP16 all prompt chunks instead go through one FlashAttention varlen call:
+    # (query rows [Tq], context slots of every chunk back to back [Tk], cu_q, cu_k,
+    # longest chunk, longest context).
+    varlen: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int, int] | None = None
 
     @classmethod
     def build(
@@ -159,7 +163,9 @@ class PagedBatch:
         device: str | torch.device,
     ) -> PagedBatch:
         bs = cache.block_size
+        use_varlen = varlen_available(cache.k)
         slot_mapping, chunks, dec_rows, dec_tables, dec_ctx = [], [], [], [], []
+        v_rows, v_slots, v_q, v_k = [], [], [], []
         start = 0
         for table, ctx, q in zip(block_tables, context_lens, query_lens, strict=True):
             slots = [table[p // bs] * bs + p % bs for p in range(ctx)]
@@ -168,6 +174,11 @@ class PagedBatch:
                 dec_rows.append(start)
                 dec_tables.append(table)
                 dec_ctx.append(ctx)
+            elif use_varlen:  # queries sit at the end of their context: bottom-right causal
+                v_rows.extend(range(start, start + q))
+                v_slots.extend(slots)
+                v_q.append(q)
+                v_k.append(ctx)
             else:
                 mask = None  # whole prompt in one chunk: plain causal attention
                 if ctx > q:  # later chunk, or prefix hit: queries sit at ctx - q + i
@@ -176,6 +187,14 @@ class PagedBatch:
                 kv = torch.tensor(slots, device=device, dtype=torch.long)
                 chunks.append((start, q, kv, mask))
             start += q
+        varlen = None
+        if v_q:
+            cu = torch.tensor([0, *v_q, 0, *v_k], dtype=torch.int32).view(2, -1)
+            cu[:, 1:] = cu[:, 1:].cumsum(1)
+            cu = cu.to(device)
+            varlen = (torch.tensor(v_rows, dtype=torch.long).to(device),
+                      torch.tensor(v_slots, dtype=torch.long).to(device),
+                      cu[0], cu[1], max(v_q), max(v_k))  # fmt: skip
         tables = None
         if dec_tables:
             width = max(len(t) for t in dec_tables)
@@ -201,4 +220,16 @@ class PagedBatch:
             mixed=True,
             decode_rows=torch.tensor(dec_rows, device=device, dtype=torch.long),
             chunks=chunks,
+            varlen=varlen,
         )
+
+
+def varlen_available(t: torch.Tensor) -> bool:
+    """FlashAttention varlen: CUDA, half precision, and a torch that ships it."""
+    if t.device.type != "cuda" or t.dtype not in (torch.bfloat16, torch.float16):
+        return False
+    try:
+        from torch.nn.attention.varlen import varlen_attn  # noqa: F401
+    except ImportError:
+        return False
+    return True

@@ -132,3 +132,39 @@ def test_mixed_steps_match_static_loop(budget, monkeypatch):
     assert calls, "no mixed step happened"
     assert eng.cached_prompt_tokens_total > 0
     assert eng.num_free_blocks == 64
+
+
+def test_varlen_prompt_chunks_match_per_chunk_sdpa(monkeypatch):
+    """BF16 mixed step: FlashAttention varlen over all prompt chunks gives the same
+    attention as one SDPA per chunk (the FP32 path), to BF16 rounding."""
+    from engine.config import ModelConfig
+    from engine.model.layers import Attention
+    from engine.runtime import paged_cache
+    from engine.runtime.paged_cache import PagedBatch, PagedKVCache
+    from tests.conftest import TINY_RAW
+
+    if not paged_cache.varlen_available(torch.zeros(1, device="cuda", dtype=torch.bfloat16)):
+        pytest.skip("this torch has no FlashAttention varlen")
+    torch.manual_seed(0)
+    cfg = ModelConfig.from_dict(TINY_RAW)
+    cache = PagedKVCache(cfg, 64, 4, "cuda", torch.bfloat16)
+    cache.k.normal_()
+    cache.v.normal_()
+    attn = Attention(cfg, 0).cuda()
+    # (new tokens, context): decode rows, a fresh prompt, chunks after a prefix hit
+    spec = [(1, 9), (6, 6), (1, 3), (5, 13), (3, 20), (1, 1)]
+    tables, nxt = [], 0
+    for _, ctx in spec:
+        n = -(-ctx // 4)
+        tables.append(list(range(nxt, nxt + n)))
+        nxt += n
+    qlens, ctxs = [q for q, _ in spec], [c for _, c in spec]
+    q = torch.randn(cfg.num_attention_heads, sum(qlens), cfg.head_dim, device="cuda",
+                    dtype=torch.bfloat16)  # fmt: skip
+    fast = PagedBatch.build(cache, tables, ctxs, qlens, "cuda", use_kernel=True)
+    assert fast.mixed and fast.varlen is not None and not fast.chunks
+    monkeypatch.setattr(paged_cache, "varlen_available", lambda t: False)
+    slow = PagedBatch.build(cache, tables, ctxs, qlens, "cuda", use_kernel=True)
+    assert slow.varlen is None and len(slow.chunks) == 3
+    got, want = attn._mixed(q, fast).float(), attn._mixed(q, slow).float()
+    assert torch.allclose(got, want, atol=2e-2, rtol=2e-2), (got - want).abs().max()
