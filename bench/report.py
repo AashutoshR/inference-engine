@@ -87,8 +87,8 @@ def decode_rows(model: str) -> list[dict]:
     return sorted(rows, key=lambda r: (order[r["mode"]], qorder[r["quant"]], str(r.get("spec"))))
 
 
-def load_sweep(model: str) -> list[dict]:
-    rows = [load(p.name) for p in RES.glob(f"load-{model}-c*.json")]
+def load_sweep(model: str, prefix: str = "load") -> list[dict]:
+    rows = [load(p.name) for p in RES.glob(f"{prefix}-{model}-c*.json")]
     return sorted((r for r in rows if r), key=lambda r: r["concurrency"])
 
 
@@ -208,6 +208,7 @@ def collect() -> dict:
             for m in (M1, M3)
         },  # fmt: skip
         "load": load_sweep(M1),
+        "vllm": load_sweep(M1, "vllm"),
         "soak": load("gate2-soak.json"),
         "gate1": gates1,
         "tests": {"cpu": junit("tests-cpu.xml"), "gpu": junit("tests-gpu.xml")},
@@ -244,6 +245,14 @@ def charts(d: dict, pal: dict) -> dict[str, str]:
             [("time to first token, p50", [r["ttft_s"]["p50"] for r in d["load"]], pal["accent"]),
              ("p99", [r["ttft_s"]["p99"] for r in d["load"]], pal["accent2"])],
             f"{SHORT[M1]}: how long users wait for the first word", "seconds", pal,
+        )  # fmt: skip
+    pairs = vllm_pairs(d)
+    if pairs:
+        out["vs-vllm"] = line_chart(
+            [e["concurrency"] for e, _ in pairs],
+            [("engine", [e["output_tokens_per_s"] for e, _ in pairs], pal["accent"]),
+             ("vLLM v0.32.0", [v["output_tokens_per_s"] for _, v in pairs], pal["accent2"])],
+            f"{SHORT[M1]}: engine and vLLM under the same load", "tokens per second", pal,
         )  # fmt: skip
     ppl_rows = []
     for m in (M1, M3):
@@ -311,6 +320,16 @@ def gate_status(d: dict) -> list[tuple[str, str, str]]:
                     f'{s["duration_s"] / 60:.0f} min, {s["requests_ok"]:,} requests, '
                     f'{sum(s["errors"].values())} errors, KV left in use '
                     f'{s["final_kv_used"]:.0%}, repeat answers differed: {mismatch_note(s)}'))  # fmt: skip
+    pairs = vllm_pairs(d)
+    top = next(((e, v) for e, v in pairs if e["concurrency"] == 64), None)
+    if top is None:
+        out.append(("Gate 3 · 70% of vLLM", "pending", "not run yet"))
+    else:
+        e, v = top
+        ratio = e["output_tokens_per_s"] / v["output_tokens_per_s"]
+        out.append(("Gate 3 · 70% of vLLM", "pass" if ratio >= 0.7 else "fail",
+                    f'{ratio:.0%} of vLLM at 64 users: {e["output_tokens_per_s"]:,.0f} vs '
+                    f'{v["output_tokens_per_s"]:,.0f} tokens/s'))  # fmt: skip
     for k, label in (("cpu", "Unit tests (CPU)"), ("gpu", "GPU tests")):
         t = d["tests"][k]
         if t is None:
@@ -409,6 +428,31 @@ def html_table(head: list[str], rows: list[list[str]]) -> str:
     return f"<div class='scroll'><table><thead><tr>{th}</tr></thead>{body}</table></div>"
 
 
+def vllm_pairs(d: dict) -> list[tuple[dict, dict]]:
+    """(engine, vLLM) load results at the same concurrency, in order."""
+    ours = {r["concurrency"]: r for r in d["load"]}
+    return [(ours[v["concurrency"]], v) for v in d.get("vllm", []) if v["concurrency"] in ours]
+
+
+VLLM_INTRO = ("Gate 3 runs the same load test against vLLM v0.32.0, the most widely used open "
+              "source LLM server, in Docker on the same GPU, same model (Llama 3.2 1B, "
+              "BF16), same 64-sequence limit, with its defaults otherwise (prefix caching, "
+              "chunked prefill and CUDA graphs on). The gate: 70% of vLLM's throughput at 64 "
+              "users.")  # fmt: skip
+VLLM_HEAD = ["users", "engine tok/s", "vLLM tok/s", "engine / vLLM", "first token p50, engine",
+             "first token p50, vLLM", "per token p50, engine", "per token p50, vLLM",
+             "repeat answers differed, vLLM"]  # fmt: skip
+
+
+def vllm_rows(d: dict) -> list[list[str]]:
+    return [[str(e["concurrency"]), f'{e["output_tokens_per_s"]:,.0f}',
+             f'{v["output_tokens_per_s"]:,.0f}',
+             f'{e["output_tokens_per_s"] / v["output_tokens_per_s"]:.0%}',
+             f'{e["ttft_s"]["p50"] * 1000:.0f} ms', f'{v["ttft_s"]["p50"] * 1000:.0f} ms',
+             f'{e["itl_s"]["p50"] * 1000:.1f} ms', f'{v["itl_s"]["p50"] * 1000:.1f} ms',
+             mismatch_note(v)] for e, v in vllm_pairs(d)]  # fmt: skip
+
+
 # --- RESULTS.md -------------------------------------------------------------------------------
 
 
@@ -493,6 +537,10 @@ def markdown(d: dict, chart_files: dict[str, str]) -> str:
                   f'repeat answers differed: {mismatch_note(s)}, KV memory '
                   f'in use at the end: {s["final_kv_used"]:.0%}.', ""]  # fmt: skip
 
+    if vllm_pairs(d):
+        lines += ["## Against vLLM (Gate 3)", "", VLLM_INTRO, ""]
+        lines += img("vs-vllm", "engine vs vLLM")
+        lines += md_table(VLLM_HEAD, vllm_rows(d))
     if d["invariance"]:
         lines += ["## Batching changes rounding, not math", "", INV_INTRO, ""]
         lines += md_table(INV_HEAD, inv_rows(d))
@@ -658,6 +706,11 @@ def page(d: dict, svgs: dict[str, str], fragment: bool) -> str:
                      f'repeat answers differed: {esc(mismatch_note(s))}, KV memory '
                      f'in use at the end: {s["final_kv_used"]:.0%}.</p>')  # fmt: skip
 
+    if vllm_pairs(d):
+        parts.append("<h2>Against vLLM (Gate 3)</h2>")
+        parts.append(f"<p>{esc(VLLM_INTRO)}</p>")
+        parts.append(fig("vs-vllm"))
+        parts.append(html_table(VLLM_HEAD, vllm_rows(d)))
     if d["invariance"]:
         parts.append("<h2>Batching changes rounding, not math</h2>")
         parts.append(f"<p>{esc(INV_INTRO)}</p>")

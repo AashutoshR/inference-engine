@@ -209,7 +209,7 @@ Measured on one **RTX 4060 Laptop GPU (8 GB)**, Windows 11, PyTorch 2.15, CUDA 1
 | **1. Same answers as Hugging Face**, Llama 3.2 1B, FP32 | ✅ **pass** | 200 of 200 prompts identical: 18,894 tokens, not one differs |
 | **1. Same answers as Hugging Face**, Llama 3.2 3B, BF16 | ❌ **fail, 195 / 200** | 181 identical, 14 near-ties; 5 split where the top two choices were 0.125 apart (see below) |
 | **2. 64 users for 30 minutes** | ❌ **fail, as written** | 15,941 requests at 833 tokens/s: 0 errors, 0 out-of-memory, 0 preemptions, all KV memory returned. Fails only on its strictest check: 153 prompts got a different greedy answer on a repeat (see below) |
-| **3. 70% of vLLM's throughput** | ⏳ not run | needs vLLM in Docker on the same GPU |
+| **3. 70% of vLLM's throughput** | ❌ **fail, 52%** | 911 vs 1,757 tokens/s at 64 users against vLLM v0.32.0 on the same GPU; 81% at 1 user (see below) |
 | Unit and property tests (CPU) | ✅ pass | 98 passed in 37 s |
 | GPU tests (Triton kernel, CUDA graphs, INT4, FP8) | ✅ pass | 23 passed in 26 s |
 
@@ -264,6 +264,33 @@ Throughput grows 13x from 1 to 64 users while each user's stream slows only from
 41 ms per token, still about 24 tokens per second each, faster than anyone reads. Zero errors and zero preemptions at every level, and all KV memory
 returned at the end of every run.
 
+### Against vLLM (Gate 3)
+
+The same load test against **vLLM v0.32.0**, the most widely used open source LLM server,
+in Docker on the same laptop GPU: same model (Llama 3.2 1B, BF16), same 64-sequence
+limit, vLLM's defaults otherwise (FlashAttention, `torch.compile`, CUDA graphs, prefix
+caching, chunked prefill).
+
+| Users | engine tok/s | vLLM tok/s | engine / vLLM | First token p50, engine / vLLM | Per token p50, engine / vLLM |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 69 | 86 | **81%** | 93 / 31 ms | 13.2 / 10.7 ms |
+| 4 | 215 | 319 | 68% | 110 / 50 ms | 15.0 / 11.3 ms |
+| 16 | 535 | 990 | 54% | 124 / 88 ms | 20.1 / 12.2 ms |
+| 32 | 719 | 1,360 | 53% | **156 / 168 ms** | 26.8 / 13.9 ms |
+| 64 | 911 | 1,757 | **52%** | **247 / 414 ms** | 41.2 / 19.8 ms |
+
+![engine vs vLLM](docs/results/vs-vllm.svg)
+
+The gate asked for 70% at 64 users; the engine reaches 52%, so it **fails**. The
+per-token column shows where the gap is: with 64 users, one engine step takes about
+41 ms against vLLM's 20. vLLM compiles the whole model into fused kernels with
+`torch.compile` and FlashAttention, while the engine still builds each step's batch in
+Python and runs mixed prompt-and-decode steps outside CUDA graphs. With one user, where
+that overhead matters least, the engine is at 81%. And it gets the first token out
+*faster* than vLLM at 32 and 64 users (247 against 414 ms at 64). One likely reason: the
+engine reads waiting prompts in large slices (up to 4,096 tokens per step), which starts
+answers sooner but makes each step slower for everyone already generating.
+
 ### Batching changes rounding, not math
 
 Under load, a greedy prompt sent twice can come back with a different answer. That would
@@ -280,7 +307,8 @@ In FP32 every token matches, so batching, paging and caching compute exactly the
 thing. In BF16 half the answers drift, and every drift starts at a token where the
 model's top two choices were within 0.25 of each other (zero to two BF16 rounding steps):
 a different batch size changes the order numbers are added in, and that rounds a coin
-flip the other way. Production servers like vLLM behave the same way in BF16. Gate 2's
+flip the other way. vLLM does exactly the same: in the Gate 3 runs it returned a
+different greedy answer on repeat for 117 prompts at 64 users. Gate 2's
 strict "same answer every time" rule cannot pass in BF16 for that reason, so it is
 reported as failed rather than relaxed after the fact.
 
@@ -310,7 +338,10 @@ both smaller and better than BF16 1B (12.01 vs 13.17, 2.45 vs 2.62 GiB).
   speed.
 - **Two gates fail as written**: Gate 1 on 3B and Gate 2, both only on BF16 rounding
   ties. Their rules should measure gaps in BF16 rounding steps rather than a fixed 0.01.
-- **Gate 3** (70% of vLLM) needs vLLM running on the same GPU and has not been measured.
+- **Gate 3 fails at 52% of vLLM.** The next steps are clear from the numbers: build each
+  step's batch on the GPU instead of in Python lists, capture mixed steps in CUDA graphs,
+  and fuse the small per-layer kernels (norm, rotary, activation) the way vLLM's
+  `torch.compile` pass does.
 
 ## Quickstart
 
@@ -410,7 +441,7 @@ Built in five phases, each closed by a measurable gate:
 
 1. **Correct baseline.** Own forward pass and sampler. Gate: identical to Hugging Face on 200 prompts. *Passed for 1B in FP32 (200/200); 3B in BF16 at 195/200, the 5 being one-rounding-step ties.*
 2. **Serving core.** Paged cache, continuous batching, Triton kernel, OpenAI API. Gate: 64 concurrent streams for 30 minutes with no errors or leaks. *Ran: 0 errors, 0 leaks, 833 tokens/s; fails only the strict repeat-answer check, which BF16 rounding breaks.*
-3. **Throughput and latency.** Chunked prefill, prefix caching, preemption, CUDA graphs. Gate: 70% of vLLM's throughput on the same GPU. *Built; the vLLM comparison is not run yet.*
+3. **Throughput and latency.** Chunked prefill, prefix caching, preemption, CUDA graphs. Gate: 70% of vLLM's throughput on the same GPU. *Ran against vLLM v0.32.0: 52% at 64 users, 81% at 1 user; not passed yet.*
 4. **Quantization and speculation.** INT4, FP8, speculative decoding.
 5. **Hardening.** Load and soak tests, metrics, dashboard, Docker, docs.
 

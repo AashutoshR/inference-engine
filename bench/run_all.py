@@ -4,7 +4,8 @@
     python bench/run_all.py --only decode ppl    # some groups
     python bench/run_all.py --soak-seconds 60    # short soak instead of Gate 2's 30 minutes
 
-Groups, in order: decode, prefill, ppl, load, tests, gate1, invariance, soak. Each step runs in its
+Groups, in order: decode, prefill, ppl, load, tests, gate1, invariance, soak, vllm
+(Gate 3: needs Docker with GPU support and the vLLM image). Each step runs in its
 own process (so GPU memory is fully released between steps), writes JSON to
 bench/results/, and a failure is logged without stopping the rest. Progress goes to
 bench/results/run_all.log. Afterwards: python bench/report.py
@@ -27,6 +28,7 @@ PY = sys.executable
 M1 = "models/Llama-3.2-1B-Instruct"
 M3 = "models/Llama-3.2-3B-Instruct"
 LOG = RESULTS / "run_all.log"
+VLLM_IMAGE = "vllm/vllm-openai:v0.32.0"  # Gate 3 baseline, pinned
 
 
 def log(msg: str) -> None:
@@ -158,7 +160,59 @@ def gate1() -> None:
         env={"ENGINE_MODEL_DIR": M3, "ENGINE_GOLDEN_DTYPE": "bfloat16"})  # fmt: skip
 
 
-GROUPS = ["decode", "prefill", "ppl", "load", "tests", "gate1", "invariance", "soak"]
+class VllmServer:
+    """vLLM's OpenAI server in Docker on the same GPU, model and limits as engine serve:
+    BF16, 64 sequences per step, prefix caching and chunked prefill (vLLM's defaults)."""
+
+    NAME = "gate3-vllm"
+
+    def __init__(self, model: str, port: int = 8012) -> None:
+        self.url = f"http://127.0.0.1:{port}"
+        subprocess.run(["docker", "rm", "-f", self.NAME], capture_output=True)
+        self.log = (RESULTS / "vllm-server.log").open("a", encoding="utf-8")
+        self.proc = subprocess.Popen(
+            ["docker", "run", "--rm", "--name", self.NAME, "--gpus", "all", "--ipc", "host",
+             "-p", f"{port}:8000", "-v", f"{(ROOT / model).resolve()}:/model:ro",
+             VLLM_IMAGE, "--model", "/model", "--served-model-name", Path(model).name,
+             "--dtype", "bfloat16", "--max-num-seqs", "64", "--max-model-len", "8192",
+             "--gpu-memory-utilization", "0.85"],
+            stdout=self.log, stderr=subprocess.STDOUT,
+        )  # fmt: skip
+
+    def __enter__(self) -> VllmServer:
+        for _ in range(900):  # first start compiles and captures graphs: minutes
+            try:
+                urllib.request.urlopen(self.url + "/health", timeout=2)
+                return self
+            except Exception:
+                if self.proc.poll() is not None:
+                    raise RuntimeError("vLLM exited; see bench/results/vllm-server.log") from None
+                time.sleep(1)
+        raise RuntimeError("vLLM did not become healthy")
+
+    def __exit__(self, *exc) -> None:
+        subprocess.run(["docker", "stop", "-t", "20", self.NAME], capture_output=True)
+        try:
+            self.proc.wait(60)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+        self.log.close()
+
+
+def vllm() -> None:
+    """Gate 3: the same load sweep against vLLM, saved as vllm-<model>-c<N>.json."""
+    try:
+        with VllmServer(M1) as srv:
+            for c in (1, 4, 16, 32, 64):
+                run(f"vllm load {Path(M1).name} c{c}",
+                    [PY, "bench/load_test.py", "--url", srv.url, "--concurrency", str(c),
+                     "--duration", "60", "--report-every", "30",
+                     "--name", f"vllm-{Path(M1).name}-c{c}"])  # fmt: skip
+    except RuntimeError as exc:
+        log(f"FAIL vllm: {exc}")
+
+
+GROUPS = ["decode", "prefill", "ppl", "load", "tests", "gate1", "invariance", "soak", "vllm"]
 
 
 def invariance() -> None:
@@ -181,7 +235,7 @@ def main() -> None:
     groups = args.only or GROUPS
     log(f"run_all: {' '.join(groups)}")
     steps = {"decode": decode, "prefill": prefill, "ppl": ppl, "load": load, "tests": tests,
-             "gate1": gate1, "invariance": invariance,
+             "gate1": gate1, "invariance": invariance, "vllm": vllm,
              "soak": lambda: soak(args.soak_seconds)}  # fmt: skip
     for g in groups:
         steps[g]()

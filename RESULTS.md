@@ -11,6 +11,7 @@ A browsable version of this page: [`docs/results.html`](docs/results.html).
 | Gate 1 · 1B FP32 exact | ✅ pass | 200 exact, 0 near-ties, 0 failed of 200 |
 | Gate 1 · 3B BF16 near-tie | ❌ fail | 181 exact, 14 near-ties, 5 failed of 200 |
 | Gate 2 · 64 streams soak | ❌ fail | 30 min, 15,941 requests, 0 errors, KV left in use 0%, repeat answers differed: 153 prompts; of 86 measured, 84 split where the top two choices were within 0.25 (largest gap 0.5) |
+| Gate 3 · 70% of vLLM | ❌ fail | 52% of vLLM at 64 users: 911 vs 1,756 tokens/s |
 | Unit tests (CPU) | ✅ pass | 98 passed, 0 failed, 37.2 s |
 | GPU tests | ✅ pass | 23 passed, 0 failed, 26.1 s |
 
@@ -87,6 +88,20 @@ The real server (`engine serve`, 1B, BF16) under N clients that each stream chat
 | 64 | 911 | 9.5 | 247 ms | 1456 ms | 41.2 ms | 174.1 ms | 0 | 0 | 86 prompts; of 52 measured, 51 split where the top two choices were within 0.25 (largest gap 1.625) |
 
 **Soak (Gate 2):** 64 streams for 30 minutes, 15,941 requests, 833 tokens/s, 0 errors, repeat answers differed: 153 prompts; of 86 measured, 84 split where the top two choices were within 0.25 (largest gap 0.5), KV memory in use at the end: 0%.
+
+## Against vLLM (Gate 3)
+
+Gate 3 runs the same load test against vLLM v0.32.0, the most widely used open source LLM server, in Docker on the same GPU, same model (Llama 3.2 1B, BF16), same 64-sequence limit, with its defaults otherwise (prefix caching, chunked prefill and CUDA graphs on). The gate: 70% of vLLM's throughput at 64 users.
+
+![engine vs vLLM](docs/results/vs-vllm.svg)
+
+| users | engine tok/s | vLLM tok/s | engine / vLLM | first token p50, engine | first token p50, vLLM | per token p50, engine | per token p50, vLLM | repeat answers differed, vLLM |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 69 | 86 | 81% | 93 ms | 31 ms | 13.2 ms | 10.7 ms | 2 prompts |
+| 4 | 215 | 319 | 68% | 110 ms | 50 ms | 15.0 ms | 11.3 ms | 20 prompts; of 12 measured, 12 split where the top two choices were within 0.25 (largest gap 0.125) |
+| 16 | 535 | 990 | 54% | 124 ms | 88 ms | 20.1 ms | 12.2 ms | 83 prompts; of 58 measured, 56 split where the top two choices were within 0.25 (largest gap 3.875) |
+| 32 | 719 | 1,360 | 53% | 156 ms | 168 ms | 26.8 ms | 13.9 ms | 90 prompts; of 58 measured, 55 split where the top two choices were within 0.25 (largest gap 3.875) |
+| 64 | 911 | 1,756 | 52% | 247 ms | 414 ms | 41.2 ms | 19.8 ms | 117 prompts; of 71 measured, 70 split where the top two choices were within 0.25 (largest gap 3.875) |
 
 ## Batching changes rounding, not math
 
