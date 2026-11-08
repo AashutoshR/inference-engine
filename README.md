@@ -224,7 +224,8 @@ Something on this machine changed between the evening of 6 November and the even
 7 November: kernel launches got cheaper and Hugging Face's own outputs shifted in their
 last bits (see *What did not work*). The engine's numbers below were all measured on
 the evening of 7 November, after the change. vLLM's are from 02:00 that day, and it is
-not known whether that was before or after.
+not known whether that was before or after (see *Against vLLM* for why that does not
+change the result).
 
 ### The gates
 
@@ -323,10 +324,13 @@ and a steadier tail at 16 users. Where the engine wins is getting new requests s
 at 64 users its first token comes in 184 ms against vLLM's 414, and a whole request
 takes 3.01 s on average against 3.44 s.
 
-vLLM was measured at 02:00 on 7 November, possibly before the machine change described
-above. vLLM replays CUDA graphs for every step, so cheaper kernel launches should help
-it less than they helped the engine's slower paths, but a rerun on the same evening is
-still owed (Docker Desktop would not start).
+**When vLLM was measured.** vLLM's numbers are from 02:00 on 7 November, possibly before
+the machine change described above, and they were not rerun. They are the final
+comparison. The change mostly made kernel launches cheaper, and vLLM replays CUDA graphs
+for every step, so it should gain little from that. The engine's own CUDA-graph path,
+the closest thing to vLLM's, gained 5% (81.5 to 85.5 tokens/s with the fused kernels
+off). If vLLM gained the same, the engine would be at about 108% instead of 113%. For
+the gate to fail, vLLM would have to be 61% faster than measured.
 
 **Round 1: 52% to 77%.** With 64 users someone finishes almost every other step and the
 next request arrives. Reading even a few prompt tokens forced the whole step off the CUDA
@@ -427,6 +431,29 @@ both smaller and better than BF16 1B (12.01 vs 13.17, 2.45 vs 2.62 GiB).
   for bit, and 3B is back to 7 rounding ties. Lessons: test fused kernels for exact
   equality, not "almost always", and give the cache a fingerprint of the GPU's own
   output so it notices drift by itself.
+
+## Conclusion
+
+A Llama inference engine written from scratch in about 3,100 lines of Python and Triton
+gives the same answers as Hugging Face and serves more tokens per second than vLLM on
+the same laptop GPU at high load.
+
+- **Correct.** Llama 3.2 1B in FP32 matches Hugging Face on every one of 18,964 tokens.
+  In BF16 the only differences are rounding ties, where the model's top two choices
+  were one or two BF16 steps apart: 7 of 200 prompts on 3B, and the repeat answers in
+  Gate 2. In FP32 batching changes nothing (128 of 128).
+- **Reliable.** 30 minutes at 64 users: 52,728 requests, 0 errors, 0 out-of-memory,
+  all KV memory returned.
+- **Fast.** 1,982 tokens/s at 64 users, 113% of vLLM v0.32.0 (the gate asked for 70%),
+  with the first token arriving in less than half vLLM's time. One user gets 91 tokens/s
+  on 1B with CUDA graphs, 194 with INT4.
+- **Where vLLM is still ahead.** Its typical decode step is 6 to 27% faster, so it wins
+  from 1 to 16 users (90 to 95%). Closing that needs more fusion of the kind
+  `torch.compile` does, without changing BF16 rounding.
+
+Gate 1 on 1B and Gate 3 pass as written. Gate 1 on 3B and Gate 2 fail only on BF16
+rounding ties, which a fixed 0.01 threshold cannot allow for; they are reported as
+failures rather than relaxed after the fact.
 
 ## Quickstart
 
